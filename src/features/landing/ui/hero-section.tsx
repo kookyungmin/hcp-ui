@@ -17,10 +17,10 @@ export function HeroSection() {
           <h1 className="font-sora text-4xl font-semibold leading-tight text-slate-950 md:text-6xl">
             원하는 클라우드 환경을
             <br />
-            빠르게 운영하세요
+            빠르게 생성하고 운영하세요
           </h1>
           <p className="max-w-2xl text-base leading-relaxed text-slate-600 md:text-lg">
-            인증/인가 기반의 운영 콘솔에서 VM, DB, VPC, Object Storage 등 핵심 서비스를 통합 관리할 수 있습니다.
+            운영 콘솔에서 VM, DB, VPC, Object Storage 등 핵심 서비스를 통합 관리할 수 있습니다.
           </p>
 
           <div className="flex flex-wrap gap-3 pt-2">

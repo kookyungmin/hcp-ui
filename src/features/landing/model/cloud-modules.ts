@@ -22,18 +22,18 @@ export type CloudService = {
 
 export const cloudServices: CloudService[] = [
   {
-    id: "vm",
-    name: "VM 관리",
+    id: "server",
+    name: "Server",
     icon: VmIcon,
     accent: "#2F80ED",
     deep: "#1E5FCB",
     soft: "#EAF3FF",
-    summary: "Linux/Windows 인스턴스 생성, 시작/중지, 스펙 조정(Scale Up/Down)까지 운영할 수 있습니다.",
+    summary: "Linux/Windows 인스턴스 생성, 시작/중지, Scale Up/Down 까지 운영할 수 있습니다.",
     highlights: ["인스턴스 라이프사이클 관리", "OS 템플릿 기반 빠른 배포", "스케일 정책 설정"]
   },
   {
     id: "db",
-    name: "DB 관리",
+    name: "Database",
     icon: DbIcon,
     accent: "#FF7A45",
     deep: "#E85F2A",
@@ -43,7 +43,7 @@ export const cloudServices: CloudService[] = [
   },
   {
     id: "vpc",
-    name: "VPC 관리",
+    name: "VPC",
     icon: VpcIcon,
     accent: "#4E6CFF",
     deep: "#354CCC",
@@ -63,7 +63,7 @@ export const cloudServices: CloudService[] = [
   },
   {
     id: "iam",
-    name: "IAM 관리",
+    name: "IAM",
     icon: IamIcon,
     accent: "#19A866",
     deep: "#117A4A",

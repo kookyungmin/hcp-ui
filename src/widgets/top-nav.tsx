@@ -10,63 +10,86 @@ const navItems = [
   { label: "가이드센터", href: "#guide" }
 ];
 
-const serviceMenuItems = [
+const serviceCategories = [
   {
-    id: "vm",
-    category: "Compute",
-    name: "VM 관리",
-    description: "Linux/Windows 인스턴스 운영 및 Scale Up/Down",
-    href: "/?service=vm#services"
+    id: "compute",
+    label: "Compute",
+    services: [
+      {
+        id: "server",
+        name: "Server",
+        description: "Linux, Windows 인스턴스 생성, 스냅샷, 스케일 조정을 운영합니다."
+      },
+      {
+        id: "funcations",
+        name: "Functions",
+        description: "Runtime Runner와 API Generator 기반 함수 실행을 지원합니다."
+      }
+    ]
   },
   {
-    id: "db",
-    category: "Database",
-    name: "DB 관리",
-    description: "백업/복구와 성능 지표를 포함한 데이터베이스 운영",
-    href: "/?service=db#services"
+    id: "database",
+    label: "Database",
+    services: [
+      {
+        id: "db-managed",
+        name: "Database Server",
+        description: "백업/복구와 성능 지표를 포함한 데이터베이스 운영 기능입니다."
+      }
+    ]
   },
   {
-    id: "vpc",
-    category: "Network",
-    name: "VPC 관리",
-    description: "VPC, Subnet, Routing, Security Group 정책 관리",
-    href: "/?service=vpc#services"
+    id: "network",
+    label: "Network",
+    services: [
+      {
+        id: "vpc",
+        name: "VPC 관리",
+        description: "VPC, Subnet, Routing, Security Group 정책을 관리합니다."
+      }
+    ]
   },
   {
-    id: "object-storage",
-    category: "Storage",
-    name: "Object Storage",
-    description: "버킷 정책, 접근 제어, 수명주기 설정",
-    href: "/?service=object-storage#services"
+    id: "storage",
+    label: "Storage",
+    services: [
+      {
+        id: "object-storage",
+        name: "Object Storage",
+        description: "버킷 정책, 접근 제어, 수명주기 설정을 제공합니다."
+      }
+    ]
   },
   {
-    id: "iam",
-    category: "Security",
-    name: "IAM 관리",
-    description: "서브 계정과 RBAC 권한 관리",
-    href: "/?service=iam#services"
-  },
-  {
-    id: "serverless",
-    category: "Platform",
-    name: "Functions",
-    description: "Runtime Runner와 API Generator 기반 함수 실행",
-    href: "/?service=serverless#services"
+    id: "security",
+    label: "Security",
+    services: [
+      {
+        id: "iam",
+        name: "IAM 관리",
+        description: "서브 계정과 RBAC 권한을 역할 기반으로 관리합니다."
+      }
+    ]
   },
   {
     id: "observability",
-    category: "Ops",
-    name: "Observability",
-    description: "메트릭/로그/알람 통합 관측",
-    href: "/?service=observability#services"
+    label: "Observability",
+    services: [
+      {
+        id: "observability",
+        name: "Observability",
+        description: "메트릭/로그/알람을 통합 관측해 운영 가시성을 높입니다."
+      }
+    ]
   }
 ];
 
 export function TopNav() {
   const [open, setOpen] = useState(false);
-  const [selectedServiceId, setSelectedServiceId] = useState(serviceMenuItems[0].id);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(serviceCategories[0].id);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const selectedService = serviceMenuItems.find((item) => item.id === selectedServiceId) ?? serviceMenuItems[0];
+
+  const selectedCategory = serviceCategories.find((item) => item.id === selectedCategoryId) ?? serviceCategories[0];
 
   const openMenu = () => {
     if (closeTimerRef.current) {
@@ -102,16 +125,20 @@ export function TopNav() {
                     <aside className="rounded-2xl bg-gradient-to-b from-slate-700 to-slate-600 p-4 text-slate-100">
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-200">Service Categories</p>
                       <ul className="mt-3 space-y-2">
-                        {serviceMenuItems.map((item) => (
-                          <li key={item.id}>
+                        {serviceCategories.map((category) => (
+                          <li key={category.id}>
                             <button
                               type="button"
-                              onClick={() => setSelectedServiceId(item.id)}
+                              onClick={() => {
+                                setSelectedCategoryId(category.id);
+                              }}
                               className={`block w-full rounded-lg px-2 py-1.5 text-left text-sm font-medium transition ${
-                                selectedServiceId === item.id ? "bg-white/20 text-white" : "text-slate-100 hover:bg-white/15"
+                                selectedCategoryId === category.id
+                                  ? "bg-white/20 text-white"
+                                  : "text-slate-100 hover:bg-white/15"
                               }`}
                             >
-                              {item.name}
+                              {category.label}
                             </button>
                           </li>
                         ))}
@@ -119,25 +146,34 @@ export function TopNav() {
                     </aside>
 
                     <div className="w-full">
-                      <article className="flex min-h-[230px] w-[320px] flex-col rounded-2xl border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#1376f8]">{selectedService.category}</p>
-                        <h3 className="pt-1 text-base font-semibold text-slate-900">{selectedService.name}</h3>
-                        <p className="pt-1 text-sm leading-relaxed text-slate-600">{selectedService.description}</p>
-                        <div className="mt-auto flex gap-2 pt-4">
-                          <button
-                            type="button"
-                            className="inline-flex h-8 items-center rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 transition hover:bg-slate-100"
-                          >
-                            상세 보기
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex h-8 items-center rounded-lg bg-slate-900 px-2.5 text-xs font-semibold text-white transition hover:bg-slate-800"
-                          >
-                            콘솔 이동
-                          </button>
-                        </div>
-                      </article>
+                      <div className="mb-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#1376f8]">
+                          {selectedCategory.label}
+                        </p>
+                      </div>
+
+                      <div className="grid w-[670px] grid-cols-2 gap-3">
+                        {selectedCategory.services.map((service) => (
+                          <article key={service.id} className="flex min-h-[230px] flex-col rounded-2xl border border-slate-200 bg-white p-4">
+                            <h3 className="pt-1 text-base font-semibold text-slate-900">{service.name}</h3>
+                            <p className="pt-2 text-sm leading-relaxed text-slate-600">{service.description}</p>
+                            <div className="mt-auto flex gap-2 pt-4">
+                              <button
+                                type="button"
+                                className="inline-flex h-8 items-center rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 transition hover:bg-slate-100"
+                              >
+                                상세 보기
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex h-8 items-center rounded-lg bg-slate-900 px-2.5 text-xs font-semibold text-white transition hover:bg-slate-800"
+                              >
+                                콘솔 이동
+                              </button>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
