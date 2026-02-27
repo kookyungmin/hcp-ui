@@ -16,7 +16,7 @@ export function HeroSection() {
             Enterprise Cloud Service
           </p>
           <h1 className="font-sora text-4xl font-semibold leading-tight text-slate-950 md:text-6xl">
-            원하는대로 클라우드 환경을
+            클라우드 환경을
             <br />
             빠르게 생성하고 운영하세요
           </h1>
