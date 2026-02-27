@@ -4,9 +4,10 @@ import { cn } from "@/shared/lib/cn";
 type InputProps = InputHTMLAttributes<HTMLInputElement> & {
   label: string;
   hint?: string;
+  error?: string;
 };
 
-export function Input({ className, label, hint, id, ...props }: InputProps) {
+export function Input({ className, label, hint, error, id, ...props }: InputProps) {
   const inputId = id ?? props.name;
 
   return (
@@ -15,12 +16,16 @@ export function Input({ className, label, hint, id, ...props }: InputProps) {
       <input
         id={inputId}
         className={cn(
-          "h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100",
+          "h-11 rounded-xl border bg-white px-3 text-sm text-slate-900 outline-none transition focus:ring-2",
+          error
+            ? "border-red-400 focus:border-red-400 focus:ring-red-100"
+            : "border-slate-300 focus:border-blue-500 focus:ring-blue-100",
           className
         )}
         {...props}
       />
-      {hint ? <span className="text-xs font-normal text-slate-500">{hint}</span> : null}
+      {error ? <span className="text-xs font-normal text-red-600">{error}</span> : null}
+      {!error && hint ? <span className="text-xs font-normal text-slate-500">{hint}</span> : null}
     </label>
   );
 }

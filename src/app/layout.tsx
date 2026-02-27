@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Noto_Sans_KR, Sora } from "next/font/google";
+import { AppProviders } from "@/app/providers";
 import "./globals.css";
 
 const sora = Sora({
@@ -29,7 +30,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body className={`${sora.variable} ${notoSansKr.variable}`}>{children}</body>
+      <body className={`${sora.variable} ${notoSansKr.variable}`}>
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   );
 }
