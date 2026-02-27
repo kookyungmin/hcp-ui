@@ -1,6 +1,6 @@
 import { Button } from "@/shared/ui/button";
 
-const providers = ["Google", "GitHub", "NAVER"];
+const providers = ["Google"];
 
 export function OauthButtons() {
   return (

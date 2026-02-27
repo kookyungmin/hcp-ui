@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuthStore } from "@/shared/stores/auth.store";
 import { BrandLogo } from "@/shared/ui/brand-logo";
 
@@ -96,6 +96,7 @@ export function TopNav() {
   const [selectedCategoryId, setSelectedCategoryId] = useState(serviceCategories[0].id);
 
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profileWrapperRef = useRef<HTMLDivElement | null>(null);
 
   const selectedCategory = serviceCategories.find((item) => item.id === selectedCategoryId) ?? serviceCategories[0];
 
@@ -112,6 +113,22 @@ export function TopNav() {
       setOpen(false);
     }, 130);
   };
+
+  useEffect(() => {
+    const onMouseDown = (event: MouseEvent) => {
+      if (!profileOpen) return;
+
+      const target = event.target as Node;
+      if (profileWrapperRef.current && !profileWrapperRef.current.contains(target)) {
+        setProfileOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", onMouseDown);
+    return () => {
+      window.removeEventListener("mousedown", onMouseDown);
+    };
+  }, [profileOpen]);
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
@@ -203,7 +220,7 @@ export function TopNav() {
         {!initialized || isInitializing ? (
           <div className="h-10 w-[170px]" aria-hidden="true" />
         ) : loginUser ? (
-          <div className="relative flex items-center gap-2">
+          <div ref={profileWrapperRef} className="relative flex items-center gap-2">
             <Link
               href="#"
               className="inline-flex h-10 items-center rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"

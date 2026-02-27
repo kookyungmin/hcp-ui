@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export function HeroSection() {
   return (
@@ -15,7 +16,7 @@ export function HeroSection() {
             Enterprise Cloud Service
           </p>
           <h1 className="font-sora text-4xl font-semibold leading-tight text-slate-950 md:text-6xl">
-            원하는 클라우드 환경을
+            원하는대로 클라우드 환경을
             <br />
             빠르게 생성하고 운영하세요
           </h1>
@@ -39,22 +40,14 @@ export function HeroSection() {
           </div>
         </div>
 
-        <div className="grid gap-3 rounded-3xl border border-slate-200/90 bg-white/90 p-5 shadow-[0_18px_50px_-35px_rgba(2,6,23,0.5)] backdrop-blur">
-          <div className="rounded-2xl bg-[#0f62ff] p-4 text-white">
-            <p className="text-xs font-medium text-blue-100">Cloud Ready</p>
-            <p className="pt-1 font-sora text-2xl font-semibold">7 Core Services</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <p className="text-xs font-medium text-slate-500">Connected Projects</p>
-              <p className="pt-1 font-sora text-2xl font-semibold text-slate-900">143</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <p className="text-xs font-medium text-slate-500">Security Coverage</p>
-              <p className="pt-1 font-sora text-2xl font-semibold text-emerald-600">99.1%</p>
-            </div>
-          </div>
-        </div>
+        <Image
+          src="/images/hero-cloud-visual.svg"
+          alt="클라우드 인프라 비주얼"
+          width={880}
+          height={700}
+          className="h-auto w-full rounded-2xl"
+          priority
+        />
       </div>
     </section>
   );

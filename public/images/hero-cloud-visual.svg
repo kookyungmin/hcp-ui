@@ -1,0 +1,95 @@
+<svg width="1200" height="900" viewBox="0 0 1200 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="panel" x1="120" y1="80" x2="980" y2="790" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FBFF"/>
+      <stop offset="1" stop-color="#EAF2FF"/>
+    </linearGradient>
+    <linearGradient id="cloud" x1="280" y1="180" x2="870" y2="500" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1E66F5"/>
+      <stop offset="1" stop-color="#00A8D1"/>
+    </linearGradient>
+    <linearGradient id="nodeBlue" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#2878FF"/>
+      <stop offset="1" stop-color="#1F5DD0"/>
+    </linearGradient>
+    <linearGradient id="nodeCyan" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#14C5E0"/>
+      <stop offset="1" stop-color="#0E98B8"/>
+    </linearGradient>
+    <filter id="shadow" x="90" y="90" width="1020" height="740" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="20"/>
+      <feGaussianBlur stdDeviation="24"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.055 0 0 0 0 0.15 0 0 0 0 0.45 0 0 0 0.16 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="130" y="110" width="940" height="680" rx="44" fill="url(#panel)"/>
+  </g>
+
+  <g>
+    <path d="M364 560c-98 0-158-56-158-136 0-72 52-128 127-136 31-78 104-128 194-128 93 0 166 54 195 136 14-3 29-5 44-5 99 0 180 70 180 156 0 65-55 113-146 113H364Z" fill="url(#cloud)"/>
+    <path d="M400 530c-70 0-116-39-116-94 0-47 35-84 86-90 22-52 68-86 128-86 63 0 111 35 133 84 10-2 20-3 30-3 66 0 118 44 118 99 0 54-45 90-110 90H400Z" fill="#FFFFFF" fill-opacity="0.16"/>
+    <animateTransform attributeName="transform" type="translate" values="0 0; 0 -12; 0 0" dur="6s" repeatCount="indefinite"/>
+  </g>
+
+  <g>
+    <path d="M338 640 472 545" stroke="#8FB3FF" stroke-width="5" stroke-linecap="round">
+      <animate attributeName="opacity" values="0.2;1;0.2" dur="4.8s" begin="0s" repeatCount="indefinite"/>
+    </path>
+    <path d="M602 640 602 560" stroke="#7EDDF0" stroke-width="5" stroke-linecap="round">
+      <animate attributeName="opacity" values="0.2;1;0.2" dur="4.8s" begin="1.6s" repeatCount="indefinite"/>
+    </path>
+    <path d="M866 640 732 545" stroke="#8FB3FF" stroke-width="5" stroke-linecap="round">
+      <animate attributeName="opacity" values="0.2;1;0.2" dur="4.8s" begin="3.2s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <g>
+    <g>
+      <rect x="252" y="640" width="170" height="108" rx="22" fill="white"/>
+      <rect x="282" y="664" width="110" height="14" rx="7" fill="#DDE8FF"/>
+      <rect x="282" y="688" width="78" height="12" rx="6" fill="#E8EEFF"/>
+      <circle cx="378" cy="706" r="14" fill="url(#nodeBlue)"/>
+      <animateTransform attributeName="transform" type="translate" values="0 0; 0 -18; 0 0" dur="4.8s" begin="0s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.55;1;0.55" dur="4.8s" begin="0s" repeatCount="indefinite"/>
+    </g>
+
+    <g>
+      <rect x="516" y="640" width="170" height="108" rx="22" fill="white"/>
+      <rect x="546" y="664" width="110" height="14" rx="7" fill="#D8F4FF"/>
+      <rect x="546" y="688" width="78" height="12" rx="6" fill="#E5FBFF"/>
+      <circle cx="642" cy="706" r="14" fill="url(#nodeCyan)"/>
+      <animateTransform attributeName="transform" type="translate" values="0 0; 0 -18; 0 0" dur="4.8s" begin="1.6s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.55;1;0.55" dur="4.8s" begin="1.6s" repeatCount="indefinite"/>
+    </g>
+
+    <g>
+      <rect x="780" y="640" width="170" height="108" rx="22" fill="white"/>
+      <rect x="810" y="664" width="110" height="14" rx="7" fill="#DDE8FF"/>
+      <rect x="810" y="688" width="78" height="12" rx="6" fill="#E8EEFF"/>
+      <circle cx="906" cy="706" r="14" fill="url(#nodeBlue)"/>
+      <animateTransform attributeName="transform" type="translate" values="0 0; 0 -18; 0 0" dur="4.8s" begin="3.2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.55;1;0.55" dur="4.8s" begin="3.2s" repeatCount="indefinite"/>
+    </g>
+  </g>
+
+  <circle cx="602" cy="560" r="10" fill="#fff"/>
+  <circle cx="472" cy="545" r="9" fill="#fff"/>
+  <circle cx="732" cy="545" r="9" fill="#fff"/>
+
+  <circle cx="942" cy="220" r="18" fill="#D2EDFF">
+    <animate attributeName="opacity" values="0.4;1;0.4" dur="5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="980" cy="260" r="10" fill="#BDE4FF">
+    <animate attributeName="opacity" values="0.5;1;0.5" dur="4s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="228" cy="214" r="12" fill="#C3DEFF">
+    <animate attributeName="opacity" values="0.5;1;0.5" dur="4.5s" repeatCount="indefinite"/>
+  </circle>
+</svg>
