@@ -34,3 +34,16 @@ src
 │  └─ ui          # 공용 UI 컴포넌트
 └─ widgets        # 복합 UI 블록
 ```
+
+### UI
+
+* 랜딩 페이지
+
+![img.png](img.png)
+
+* 로그인 / 회원가입
+
+![img_1.png](img_1.png)
+
+
+![img_2.png](img_2.png)

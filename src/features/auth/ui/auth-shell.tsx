@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { BrandLogo } from "@/shared/ui/brand-logo";
+import Image from "next/image";
 
 type AuthShellProps = {
   title: string;
@@ -23,6 +24,14 @@ export function AuthShell({ title, description, children }: AuthShellProps) {
             <p className="text-base leading-relaxed text-slate-600">
               인증부터 인가, 운영까지 하나의 콘솔에서 관리할 수 있도록 설계된 클라우드 플랫폼 UI입니다.
             </p>
+            <Image
+                src="/images/hero-cloud-visual.svg"
+                alt="클라우드 인프라 비주얼"
+                width={800}
+                height={600}
+                className="h-auto w-full rounded-2xl"
+                priority
+            />
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">

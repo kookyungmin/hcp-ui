@@ -7,8 +7,8 @@ export default function SignUpPage() {
   return (
     <AuthShell title="회원가입" description="클라우드 콘솔 사용을 위한 조직 계정을 생성하세요.">
       <form className="space-y-4">
-        <Input label="이름" name="name" placeholder="홍길동" />
-        <Input label="회사 이메일" name="email" type="email" placeholder="you@company.com" />
+        <Input label="닉네임" name="name" placeholder="홍길동" />
+        <Input label="이메일" name="email" type="email" placeholder="you@company.com" />
         <Input label="비밀번호" name="password" type="password" placeholder="8자 이상 입력" hint="영문, 숫자, 특수문자 조합 권장" />
         <Input label="비밀번호 확인" name="passwordConfirm" type="password" placeholder="비밀번호 재입력" />
 
