@@ -39,11 +39,11 @@ src
 
 * 랜딩 페이지
 
-![img.png](img.png)
+![img.png](image/img.png)
 
 * 로그인 / 회원가입
 
-![img_1.png](img_1.png)
+![img_1.png](image/img_1.png)
 
 
-![img_2.png](img_2.png)
+![img_2.png](image/img_2.png)
