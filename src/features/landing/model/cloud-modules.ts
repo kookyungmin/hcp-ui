@@ -9,7 +9,7 @@ import {
   VpcIcon
 } from "@/shared/ui/service-icons";
 
-export type CloudService = {
+type CloudService = {
   id: string;
   name: string;
   summary: string;

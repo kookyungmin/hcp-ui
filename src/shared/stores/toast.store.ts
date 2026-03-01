@@ -1,8 +1,8 @@
 import { create } from "zustand";
 
-export type ToastType = "success" | "error";
+type ToastType = "success" | "error";
 
-export type ToastItem = {
+type ToastItem = {
   id: string;
   type: ToastType;
   message: string;

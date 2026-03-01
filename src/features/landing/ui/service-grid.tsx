@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { cloudServices } from "@/features/landing/model/cloud-modules";
 import { cn } from "@/shared/lib/cn";
+import { useAuthStore } from "@/shared/stores/auth.store";
+import { useToastStore } from "@/shared/stores/toast.store";
 
 function hexToRgba(hex: string, alpha: number) {
   const safeHex = hex.replace("#", "");
@@ -16,7 +18,10 @@ function hexToRgba(hex: string, alpha: number) {
 }
 
 export function ServiceGrid() {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const loginUser = useAuthStore((state) => state.loginUser);
+  const showToast = useToastStore((state) => state.showToast);
   const initialId = searchParams.get("service");
 
   const validInitialId = useMemo(
@@ -31,6 +36,20 @@ export function ServiceGrid() {
 
   const activeService = cloudServices.find((item) => item.id === activeId) ?? cloudServices[0];
   const ActiveIcon = activeService.icon;
+  const onUnsupportedClick = () => {
+    showToast("error", "사용 권한이 없습니다.");
+  };
+
+  const onGoConsole = () => {
+    const isSupported = activeService.id === "server";
+
+    if (!isSupported) {
+      onUnsupportedClick();
+      return;
+    }
+
+    router.push("/console?category=compute&service=server");
+  };
 
   return (
     <section className="relative py-10 md:py-12" id="services">
@@ -39,6 +58,12 @@ export function ServiceGrid() {
         <div className="rounded-[28px] border border-slate-200 bg-[#eef1f5] p-6 md:p-8">
           <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
             <h2 className="font-sora text-3xl font-semibold text-slate-950">주요 클라우드 서비스를 사용해보세요</h2>
+            <a
+              href="#services"
+              className="inline-flex h-11 items-center rounded-full bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              서비스 전체 보기
+            </a>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
@@ -100,20 +125,24 @@ export function ServiceGrid() {
                   ))}
                 </ul>
                 <div className="mt-5 flex flex-wrap gap-2">
-                  <a
-                    href={`/auth/sign-in`}
-                    className="inline-flex h-10 items-center rounded-xl px-4 text-sm font-semibold text-white transition"
-                    style={{ backgroundColor: activeService.accent }}
-                  >
-                    콘솔에서 시작
-                  </a>
-                  <a
-                    href={`/?service=${activeService.id}#services`}
+                  {loginUser ? (
+                    <button
+                      type="button"
+                      onClick={onGoConsole}
+                      className="inline-flex h-10 items-center rounded-xl px-4 text-sm font-semibold text-white transition"
+                      style={{ backgroundColor: activeService.accent }}
+                    >
+                      콘솔에서 시작
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={onUnsupportedClick}
                     className="inline-flex h-10 items-center rounded-xl border bg-white px-4 text-sm font-semibold transition hover:bg-slate-100"
                     style={{ borderColor: hexToRgba(activeService.accent, 0.35), color: activeService.deep }}
                   >
                     상세 보기
-                  </a>
+                  </button>
                 </div>
               </div>
             </article>

@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { SERVICE_CATEGORIES } from "@/shared/constants/service-catalog";
 import { useAuthStore } from "@/shared/stores/auth.store";
+import { useToastStore } from "@/shared/stores/toast.store";
 import { BrandLogo } from "@/shared/ui/brand-logo";
 
 const navItems = [
@@ -11,94 +14,22 @@ const navItems = [
   { label: "가이드센터", href: "#guide" }
 ];
 
-const serviceCategories = [
-  {
-    id: "compute",
-    label: "Compute",
-    services: [
-      {
-        id: "server",
-        name: "Server",
-        description: "Linux, Windows 인스턴스 생성, 스냅샷, 스케일 조정을 운영합니다."
-      },
-      {
-        id: "functions",
-        name: "Functions",
-        description: "Runtime Runner와 API Generator 기반 함수 실행을 지원합니다."
-      }
-    ]
-  },
-  {
-    id: "database",
-    label: "Database",
-    services: [
-      {
-        id: "db-managed",
-        name: "Database Server",
-        description: "백업/복구와 성능 지표를 포함한 데이터베이스 운영 기능입니다."
-      }
-    ]
-  },
-  {
-    id: "network",
-    label: "Network",
-    services: [
-      {
-        id: "vpc",
-        name: "VPC 관리",
-        description: "VPC, Subnet, Routing, Security Group 정책을 관리합니다."
-      }
-    ]
-  },
-  {
-    id: "storage",
-    label: "Storage",
-    services: [
-      {
-        id: "object-storage",
-        name: "Object Storage",
-        description: "버킷 정책, 접근 제어, 수명주기 설정을 제공합니다."
-      }
-    ]
-  },
-  {
-    id: "security",
-    label: "Security",
-    services: [
-      {
-        id: "iam",
-        name: "IAM 관리",
-        description: "서브 계정과 RBAC 권한을 역할 기반으로 관리합니다."
-      }
-    ]
-  },
-  {
-    id: "observability",
-    label: "Observability",
-    services: [
-      {
-        id: "observability",
-        name: "Observability",
-        description: "메트릭/로그/알람을 통합 관측해 운영 가시성을 높입니다."
-      }
-    ]
-  }
-];
-
 export function TopNav() {
+  const router = useRouter();
   const loginUser = useAuthStore((state) => state.loginUser);
   const initialized = useAuthStore((state) => state.initialized);
   const isInitializing = useAuthStore((state) => state.isInitializing);
   const logout = useAuthStore((state) => state.logout);
+  const showToast = useToastStore((state) => state.showToast);
 
   const [open, setOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [selectedCategoryId, setSelectedCategoryId] = useState(serviceCategories[0].id);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(SERVICE_CATEGORIES[0].id);
 
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profileWrapperRef = useRef<HTMLDivElement | null>(null);
 
-  const selectedCategory = serviceCategories.find((item) => item.id === selectedCategoryId) ?? serviceCategories[0];
+  const selectedCategory = SERVICE_CATEGORIES.find((item) => item.id === selectedCategoryId) ?? SERVICE_CATEGORIES[0];
 
   const openMenu = () => {
     if (closeTimerRef.current) {
@@ -112,6 +43,24 @@ export function TopNav() {
     closeTimerRef.current = setTimeout(() => {
       setOpen(false);
     }, 130);
+  };
+
+  const onUnsupportedClick = () => {
+    showToast("error", "사용 권한이 없습니다.");
+  };
+
+  const onGoConsole = () => {
+    router.push("/console?category=compute&service=server");
+  };
+
+  const onGoConsoleByMenu = (categoryId: string, serviceId: string) => {
+    const isSupported = categoryId === "compute" && serviceId === "server";
+    if (!isSupported) {
+      onUnsupportedClick();
+      return;
+    }
+
+    router.push("/console?category=compute&service=server");
   };
 
   useEffect(() => {
@@ -142,9 +91,13 @@ export function TopNav() {
         ) : (
           <nav className="hidden items-center gap-7 md:flex">
             <div className="relative" onMouseEnter={openMenu} onMouseLeave={scheduleCloseMenu}>
-              <a href="#services" className="text-sm font-semibold text-slate-900 transition hover:text-[#1376f8]">
+              <button
+                type="button"
+                onClick={openMenu}
+                className="text-sm font-semibold text-slate-900 transition hover:text-[#1376f8]"
+              >
                 서비스
-              </a>
+              </button>
 
               {open ? (
                 <div className="absolute left-1/2 top-full w-[1280px] -translate-x-1/2 pt-3" onMouseEnter={openMenu} onMouseLeave={scheduleCloseMenu}>
@@ -153,7 +106,7 @@ export function TopNav() {
                       <aside className="rounded-2xl bg-gradient-to-b from-slate-700 to-slate-600 p-4 text-slate-100">
                         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-200">Service Categories</p>
                         <ul className="mt-3 space-y-2">
-                          {serviceCategories.map((category) => (
+                          {SERVICE_CATEGORIES.map((category) => (
                             <li key={category.id}>
                               <button
                                 type="button"
@@ -188,16 +141,20 @@ export function TopNav() {
                               <div className="mt-auto flex gap-2 pt-4">
                                 <button
                                   type="button"
+                                  onClick={onUnsupportedClick}
                                   className="inline-flex h-8 items-center rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 transition hover:bg-slate-100"
                                 >
                                   상세 보기
                                 </button>
-                                <button
-                                  type="button"
-                                  className="inline-flex h-8 items-center rounded-lg bg-slate-900 px-2.5 text-xs font-semibold text-white transition hover:bg-slate-800"
-                                >
-                                  콘솔 이동
-                                </button>
+                                {loginUser ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onGoConsoleByMenu(selectedCategory.id, service.id)}
+                                    className="inline-flex h-8 items-center rounded-lg bg-slate-900 px-2.5 text-xs font-semibold text-white transition hover:bg-slate-800"
+                                  >
+                                    콘솔 이동
+                                  </button>
+                                ) : null}
                               </div>
                             </article>
                           ))}
@@ -221,12 +178,13 @@ export function TopNav() {
           <div className="h-10 w-[170px]" aria-hidden="true" />
         ) : loginUser ? (
           <div ref={profileWrapperRef} className="relative flex items-center gap-2">
-            <Link
-              href="#"
+            <button
+              type="button"
+              onClick={onGoConsole}
               className="inline-flex h-10 items-center rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
               콘솔로 이동
-            </Link>
+            </button>
 
             <button
               type="button"

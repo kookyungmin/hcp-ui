@@ -32,19 +32,39 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       const token = getAccessToken();
 
+      // 1) accessToken이 없으면 refresh로 먼저 복구 시도
       if (!token) {
         try {
           const refreshResult = await refreshTokenApi();
           setAccessToken(refreshResult.accessToken);
         } catch {
+          clearAccessToken();
           set({ loginUser: null, initialized: true, isInitializing: false });
           return;
         }
       }
 
-      const me = await getMeApi();
-      set({ loginUser: me, initialized: true, isInitializing: false });
+      // 2) /me 호출
+      try {
+        const me = await getMeApi();
+        set({ loginUser: me, initialized: true, isInitializing: false });
+        return;
+      } catch {
+        // 3) 토큰 만료 가능성: refresh 후 /me 재시도
+        try {
+          const refreshResult = await refreshTokenApi();
+          setAccessToken(refreshResult.accessToken);
+          const me = await getMeApi();
+          set({ loginUser: me, initialized: true, isInitializing: false });
+          return;
+        } catch {
+          clearAccessToken();
+          set({ loginUser: null, initialized: true, isInitializing: false });
+          return;
+        }
+      }
     } catch {
+      clearAccessToken();
       set({ loginUser: null, initialized: true, isInitializing: false });
     }
   },
