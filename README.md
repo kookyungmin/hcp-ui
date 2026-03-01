@@ -48,6 +48,4 @@ src
 
 ![img_2.png](image/img_2.png)
 
-* 인스턴스 목록
 
-![img.png](img.png)
