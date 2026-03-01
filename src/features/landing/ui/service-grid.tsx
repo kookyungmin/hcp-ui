@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cloudServices } from "@/features/landing/model/cloud-modules";
 import { cn } from "@/shared/lib/cn";
+import { hasRolePermission, PERMISSIONS } from "@/shared/lib/permission";
 import { useAuthStore } from "@/shared/stores/auth.store";
 import { useToastStore } from "@/shared/stores/toast.store";
 
@@ -36,14 +37,14 @@ export function ServiceGrid() {
 
   const activeService = cloudServices.find((item) => item.id === activeId) ?? cloudServices[0];
   const ActiveIcon = activeService.icon;
+  const canReadServerInstance = hasRolePermission(loginUser?.roles, PERMISSIONS.SERVER_INSTANCE_READ);
   const onUnsupportedClick = () => {
-    showToast("error", "사용 권한이 없습니다.");
+    showToast("error", "권한이 없습니다.");
   };
 
   const onGoConsole = () => {
-    const isSupported = activeService.id === "server";
-
-    if (!isSupported) {
+    const canEnterConsole = activeService.id === "server" && canReadServerInstance;
+    if (!canEnterConsole) {
       onUnsupportedClick();
       return;
     }

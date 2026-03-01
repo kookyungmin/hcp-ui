@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SERVICE_CATEGORIES } from "@/shared/constants/service-catalog";
+import { hasRolePermission, PERMISSIONS } from "@/shared/lib/permission";
 import { useAuthStore } from "@/shared/stores/auth.store";
 import { useToastStore } from "@/shared/stores/toast.store";
 import { BrandLogo } from "@/shared/ui/brand-logo";
@@ -21,6 +22,7 @@ export function TopNav() {
   const isInitializing = useAuthStore((state) => state.isInitializing);
   const logout = useAuthStore((state) => state.logout);
   const showToast = useToastStore((state) => state.showToast);
+  const canReadServerInstance = hasRolePermission(loginUser?.roles, PERMISSIONS.SERVER_INSTANCE_READ);
 
   const [open, setOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -46,16 +48,20 @@ export function TopNav() {
   };
 
   const onUnsupportedClick = () => {
-    showToast("error", "사용 권한이 없습니다.");
+    showToast("error", "권한이 없습니다.");
   };
 
   const onGoConsole = () => {
+    if (!canReadServerInstance) {
+      onUnsupportedClick();
+      return;
+    }
     router.push("/console?category=compute&service=server");
   };
 
   const onGoConsoleByMenu = (categoryId: string, serviceId: string) => {
-    const isSupported = categoryId === "compute" && serviceId === "server";
-    if (!isSupported) {
+    const canEnterConsole = categoryId === "compute" && serviceId === "server" && canReadServerInstance;
+    if (!canEnterConsole) {
       onUnsupportedClick();
       return;
     }

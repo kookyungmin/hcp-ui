@@ -23,21 +23,6 @@ export function HeroSection() {
           <p className="max-w-2xl text-base leading-relaxed text-slate-600 md:text-lg">
             운영 콘솔에서 VM, DB, VPC, Object Storage 등 핵심 서비스를 통합 관리할 수 있습니다.
           </p>
-
-          <div className="flex flex-wrap gap-3 pt-2">
-            <Link
-              href="/auth/sign-in"
-              className="inline-flex h-12 items-center rounded-xl bg-[#1f67ff] px-5 text-sm font-semibold text-white transition hover:bg-[#1457d9]"
-            >
-              콘솔 로그인
-            </Link>
-            <Link
-              href="#services"
-              className="inline-flex h-12 items-center rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
-            >
-              서비스 보기
-            </Link>
-          </div>
         </div>
 
         <Image

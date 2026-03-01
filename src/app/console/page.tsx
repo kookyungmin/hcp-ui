@@ -667,8 +667,8 @@ export default function ConsolePage() {
                   <th className="border-b border-r border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">OS 명</th>
                   <th className="border-b border-r border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">OS 버전</th>
                   <th className="border-b border-r border-slate-200 px-3 py-2 text-right text-[11px] font-semibold tracking-[0.02em]">CPU Cores</th>
-                  <th className="border-b border-r border-slate-200 px-3 py-2 text-right text-[11px] font-semibold tracking-[0.02em]">Memory Size (GB)</th>
-                  <th className="border-b border-r border-slate-200 px-3 py-2 text-right text-[11px] font-semibold tracking-[0.02em]">Storage Size (GB)</th>
+                  <th className="border-b border-r border-slate-200 px-3 py-2 text-right text-[11px] font-semibold tracking-[0.02em]">Memory Size </th>
+                  <th className="border-b border-r border-slate-200 px-3 py-2 text-right text-[11px] font-semibold tracking-[0.02em]">Storage Size</th>
                   <th className="border-b border-r border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">Public IP</th>
                   <th className="border-b border-r border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">Private IP</th>
                   <th className="border-b border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">VPC 명</th>
