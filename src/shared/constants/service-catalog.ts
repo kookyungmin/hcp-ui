@@ -1,13 +1,18 @@
-type ServiceMenuItem = {
+export type ServiceMenuItem = {
   id: string;
   name: string;
   description: string;
 };
 
-type ServiceCategory = {
+export type ServiceCategory = {
   id: string;
   label: string;
   services: ServiceMenuItem[];
+};
+
+export type ConsoleServiceTarget = {
+  categoryId: string;
+  serviceId: string;
 };
 
 export const SERVICE_CATEGORIES: ServiceCategory[] = [
@@ -83,3 +88,17 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     ]
   }
 ];
+
+const LANDING_SERVICE_TO_CONSOLE_TARGET: Record<string, ConsoleServiceTarget> = {
+  server: { categoryId: "compute", serviceId: "server" },
+  serverless: { categoryId: "compute", serviceId: "functions" },
+  db: { categoryId: "database", serviceId: "db-managed" },
+  vpc: { categoryId: "network", serviceId: "vpc" },
+  "object-storage": { categoryId: "storage", serviceId: "object-storage" },
+  iam: { categoryId: "security", serviceId: "iam" },
+  observability: { categoryId: "observability", serviceId: "observability" }
+};
+
+export function getConsoleTargetByLandingServiceId(serviceId: string) {
+  return LANDING_SERVICE_TO_CONSOLE_TARGET[serviceId] ?? null;
+}

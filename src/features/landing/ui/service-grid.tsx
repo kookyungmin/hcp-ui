@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cloudServices } from "@/features/landing/model/cloud-modules";
+import { getConsoleTargetByLandingServiceId } from "@/shared/constants/service-catalog";
 import { cn } from "@/shared/lib/cn";
-import { hasRolePermission, PERMISSIONS } from "@/shared/lib/permission";
+import { hasServicePermission } from "@/shared/lib/permission";
 import { useAuthStore } from "@/shared/stores/auth.store";
 import { useToastStore } from "@/shared/stores/toast.store";
 
@@ -37,19 +38,20 @@ export function ServiceGrid() {
 
   const activeService = cloudServices.find((item) => item.id === activeId) ?? cloudServices[0];
   const ActiveIcon = activeService.icon;
-  const canReadServerInstance = hasRolePermission(loginUser?.roles, PERMISSIONS.SERVER_INSTANCE_READ);
   const onUnsupportedClick = () => {
     showToast("error", "권한이 없습니다.");
   };
 
   const onGoConsole = () => {
-    const canEnterConsole = activeService.id === "server" && canReadServerInstance;
+    const target = getConsoleTargetByLandingServiceId(activeService.id);
+    const canEnterConsole =
+      target && hasServicePermission(loginUser?.roles, target.categoryId, target.serviceId, "read");
     if (!canEnterConsole) {
       onUnsupportedClick();
       return;
     }
 
-    router.push("/console?category=compute&service=server");
+    router.push(`/console?category=${target.categoryId}&service=${target.serviceId}`);
   };
 
   return (

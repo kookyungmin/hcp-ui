@@ -7,7 +7,7 @@ import { BrandLogo } from "@/shared/ui/brand-logo";
 import { SERVICE_CATEGORIES } from "@/shared/constants/service-catalog";
 import { useAuthStore } from "@/shared/stores/auth.store";
 import { useToastStore } from "@/shared/stores/toast.store";
-import { hasRolePermission, PERMISSIONS } from "@/shared/lib/permission";
+import { hasServicePermission } from "@/shared/lib/permission";
 
 function CategoryIcon({ id }: { id: string }) {
   switch (id) {
@@ -256,12 +256,21 @@ export default function ConsolePage() {
   const operationDropdownRef = useRef<HTMLDivElement | null>(null);
   const readPermissionDeniedRef = useRef(false);
   const instances = MOCK_INSTANCES;
-  const canReadServer = hasRolePermission(loginUser?.roles, PERMISSIONS.SERVER_INSTANCE_READ);
-  const canExecuteServer = hasRolePermission(loginUser?.roles, PERMISSIONS.SERVER_INSTANCE_EXECUTE);
-  const canWriteServer = hasRolePermission(loginUser?.roles, PERMISSIONS.SERVER_INSTANCE_WRITE);
+  const firstReadableTarget = useMemo(() => {
+    for (const category of SERVICE_CATEGORIES) {
+      for (const service of category.services) {
+        if (hasServicePermission(loginUser?.roles, category.id, service.id, "read")) {
+          return { categoryId: category.id, serviceId: service.id };
+        }
+      }
+    }
 
-  const isSupportedSelection = (categoryId: string, serviceId: string) =>
-    categoryId === "compute" && serviceId === "server";
+    return null;
+  }, [loginUser?.roles]);
+  const fallbackTarget = firstReadableTarget ?? { categoryId: "compute", serviceId: "server" };
+  const canReadService = hasServicePermission(loginUser?.roles, activeCategoryId, activeServiceId, "read");
+  const canExecuteService = hasServicePermission(loginUser?.roles, activeCategoryId, activeServiceId, "execute");
+  const canWriteService = hasServicePermission(loginUser?.roles, activeCategoryId, activeServiceId, "write");
 
   useEffect(() => {
     if (initialized && !isInitializing && !loginUser) {
@@ -271,12 +280,18 @@ export default function ConsolePage() {
 
   useEffect(() => {
     if (!initialized || isInitializing || !loginUser) return;
-    if (canReadServer || readPermissionDeniedRef.current) return;
+    if (canReadService || readPermissionDeniedRef.current) return;
+
+    if (firstReadableTarget) {
+      setActiveCategoryId(firstReadableTarget.categoryId);
+      setActiveServiceId(firstReadableTarget.serviceId);
+      return;
+    }
 
     readPermissionDeniedRef.current = true;
     showToast("error", "권한이 없습니다.");
     router.replace("/");
-  }, [initialized, isInitializing, loginUser, canReadServer, showToast, router]);
+  }, [initialized, isInitializing, loginUser, canReadService, firstReadableTarget, showToast, router]);
 
   const activeCategory = useMemo(
     () => SERVICE_CATEGORIES.find((category) => category.id === activeCategoryId) ?? SERVICE_CATEGORIES[0],
@@ -343,44 +358,50 @@ export default function ConsolePage() {
   }, [activeRowId, pagedInstances]);
 
   useEffect(() => {
-    if (!hasSelectedInstance || !canWriteServer) {
+    if (!hasSelectedInstance || !canWriteService) {
       setOperationDropdownOpen(false);
     }
-  }, [hasSelectedInstance, canWriteServer]);
+  }, [hasSelectedInstance, canWriteService]);
 
   useEffect(() => {
     const categoryFromQuery = searchParams.get("category");
     const serviceFromQuery = searchParams.get("service");
 
     if (!categoryFromQuery || !serviceFromQuery) {
-      setActiveCategoryId("compute");
-      setActiveServiceId("server");
+      setActiveCategoryId(fallbackTarget.categoryId);
+      setActiveServiceId(fallbackTarget.serviceId);
       return;
     }
 
     const matchedCategory = SERVICE_CATEGORIES.find((category) => category.id === categoryFromQuery);
     if (!matchedCategory) {
-      setActiveCategoryId("compute");
-      setActiveServiceId("server");
+      setActiveCategoryId(fallbackTarget.categoryId);
+      setActiveServiceId(fallbackTarget.serviceId);
       return;
     }
 
     const matchedService = matchedCategory.services.find((service) => service.id === serviceFromQuery);
     if (!matchedService) {
-      setActiveCategoryId("compute");
-      setActiveServiceId("server");
+      setActiveCategoryId(fallbackTarget.categoryId);
+      setActiveServiceId(fallbackTarget.serviceId);
       return;
     }
 
-    if (!isSupportedSelection(matchedCategory.id, matchedService.id)) {
-      setActiveCategoryId("compute");
-      setActiveServiceId("server");
+    const canReadRequestedService = hasServicePermission(
+      loginUser?.roles,
+      matchedCategory.id,
+      matchedService.id,
+      "read"
+    );
+    if (!canReadRequestedService) {
+      setActiveCategoryId(fallbackTarget.categoryId);
+      setActiveServiceId(fallbackTarget.serviceId);
       return;
     }
 
     setActiveCategoryId(matchedCategory.id);
     setActiveServiceId(matchedService.id);
-  }, [searchParams]);
+  }, [searchParams, loginUser?.roles, fallbackTarget.categoryId, fallbackTarget.serviceId]);
 
   const toggleCategory = (categoryId: string) => {
     setCollapsedCategories((prev) => ({
@@ -401,7 +422,7 @@ export default function ConsolePage() {
     return null;
   }
 
-  if (!canReadServer) {
+  if (!canReadService) {
     return null;
   }
 
@@ -474,12 +495,15 @@ export default function ConsolePage() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (!isSupportedSelection(category.id, category.services[0]?.id ?? "")) {
+                        const readableService = category.services.find((service) =>
+                          hasServicePermission(loginUser?.roles, category.id, service.id, "read")
+                        );
+                        if (!readableService) {
                           showToast("error", "사용 권한이 없습니다.");
                           return;
                         }
                         setActiveCategoryId(category.id);
-                        setActiveServiceId(category.services[0]?.id ?? "");
+                        setActiveServiceId(readableService.id);
                         setCollapsedCategories((prev) => ({ ...prev, [category.id]: false }));
                       }}
                       className={`flex flex-1 items-center gap-2 px-2.5 py-2 text-left text-sm font-semibold transition ${
@@ -519,7 +543,7 @@ export default function ConsolePage() {
                           <button
                             type="button"
                             onClick={() => {
-                              if (!isSupportedSelection(category.id, service.id)) {
+                              if (!hasServicePermission(loginUser?.roles, category.id, service.id, "read")) {
                                 showToast("error", "사용 권한이 없습니다.");
                                 return;
                               }
@@ -584,7 +608,7 @@ export default function ConsolePage() {
                   </svg>
                 </button>
 
-                {canExecuteServer ? (
+                {canExecuteService ? (
                   <button
                     type="button"
                     disabled={!hasSelectedInstance}
@@ -595,7 +619,7 @@ export default function ConsolePage() {
                   </button>
                 ) : null}
 
-                {canWriteServer ? (
+                {canWriteService ? (
                   <div ref={operationDropdownRef} className="relative">
                     <button
                       type="button"
@@ -631,7 +655,7 @@ export default function ConsolePage() {
                   </div>
                 ) : null}
 
-                {canWriteServer ? (
+                {canWriteService ? (
                   <button
                     type="button"
                     disabled={!hasSelectedInstance}
@@ -644,7 +668,7 @@ export default function ConsolePage() {
                   </button>
                 ) : null}
 
-                {canWriteServer ? (
+                {canWriteService ? (
                   <button
                     type="button"
                     onClick={() => showToast("success", "인스턴스 생성 화면으로 이동합니다.")}

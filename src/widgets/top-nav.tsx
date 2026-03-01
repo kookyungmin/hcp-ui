@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SERVICE_CATEGORIES } from "@/shared/constants/service-catalog";
-import { hasRolePermission, PERMISSIONS } from "@/shared/lib/permission";
+import { hasServicePermission } from "@/shared/lib/permission";
 import { useAuthStore } from "@/shared/stores/auth.store";
 import { useToastStore } from "@/shared/stores/toast.store";
 import { BrandLogo } from "@/shared/ui/brand-logo";
@@ -22,7 +22,6 @@ export function TopNav() {
   const isInitializing = useAuthStore((state) => state.isInitializing);
   const logout = useAuthStore((state) => state.logout);
   const showToast = useToastStore((state) => state.showToast);
-  const canReadServerInstance = hasRolePermission(loginUser?.roles, PERMISSIONS.SERVER_INSTANCE_READ);
 
   const [open, setOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -32,6 +31,17 @@ export function TopNav() {
   const profileWrapperRef = useRef<HTMLDivElement | null>(null);
 
   const selectedCategory = SERVICE_CATEGORIES.find((item) => item.id === selectedCategoryId) ?? SERVICE_CATEGORIES[0];
+  const firstAccessibleTarget = useMemo(() => {
+    for (const category of SERVICE_CATEGORIES) {
+      for (const service of category.services) {
+        if (hasServicePermission(loginUser?.roles, category.id, service.id, "read")) {
+          return { categoryId: category.id, serviceId: service.id };
+        }
+      }
+    }
+
+    return null;
+  }, [loginUser?.roles]);
 
   const openMenu = () => {
     if (closeTimerRef.current) {
@@ -52,21 +62,21 @@ export function TopNav() {
   };
 
   const onGoConsole = () => {
-    if (!canReadServerInstance) {
+    if (!firstAccessibleTarget) {
       onUnsupportedClick();
       return;
     }
-    router.push("/console?category=compute&service=server");
+    router.push(`/console?category=${firstAccessibleTarget.categoryId}&service=${firstAccessibleTarget.serviceId}`);
   };
 
   const onGoConsoleByMenu = (categoryId: string, serviceId: string) => {
-    const canEnterConsole = categoryId === "compute" && serviceId === "server" && canReadServerInstance;
+    const canEnterConsole = hasServicePermission(loginUser?.roles, categoryId, serviceId, "read");
     if (!canEnterConsole) {
       onUnsupportedClick();
       return;
     }
 
-    router.push("/console?category=compute&service=server");
+    router.push(`/console?category=${categoryId}&service=${serviceId}`);
   };
 
   useEffect(() => {
