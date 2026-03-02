@@ -1,0 +1,5 @@
+<svg width="120" height="36" viewBox="0 0 120 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2.5" y="2.5" width="31" height="31" rx="6" fill="#10B981" stroke="#059669"/>
+  <path d="M11 27V9H20.5C24.2 9 26 11 26 13.8C26 16.1 24.7 17.5 22.7 18.1L26.4 27H22.4L19.1 18.9H14.4V27H11ZM14.4 16H20.2C21.9 16 22.8 15.1 22.8 13.8C22.8 12.4 21.9 11.5 20.2 11.5H14.4V16Z" fill="white"/>
+  <text x="41" y="24" fill="#111827" font-size="18" font-family="Arial, Helvetica, sans-serif">Rocky</text>
+</svg>
