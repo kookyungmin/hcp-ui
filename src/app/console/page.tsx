@@ -230,6 +230,7 @@ const MOCK_INSTANCES: ServerInstance[] = [
 ];
 
 export default function ConsolePage() {
+  const SIDEBAR_COLLAPSE_BREAKPOINT = 1500;
   const router = useRouter();
   const searchParams = useSearchParams();
   const loginUser = useAuthStore((state) => state.loginUser);
@@ -240,10 +241,12 @@ export default function ConsolePage() {
 
   const [activeCategoryId, setActiveCategoryId] = useState("compute");
   const [activeServiceId, setActiveServiceId] = useState("server");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth < SIDEBAR_COLLAPSE_BREAKPOINT : false
+  );
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>(() =>
     SERVICE_CATEGORIES.reduce<Record<string, boolean>>((acc, category) => {
-      acc[category.id] = category.id !== SERVICE_CATEGORIES[0].id;
+      acc[category.id] = false;
       return acc;
     }, {})
   );
@@ -322,6 +325,18 @@ export default function ConsolePage() {
     if (totalPages >= 2) pages.push(2);
     return pages;
   }, [totalPages]);
+
+  useEffect(() => {
+    const updateSidebarCollapsed = () => {
+      setSidebarCollapsed(window.innerWidth < SIDEBAR_COLLAPSE_BREAKPOINT);
+    };
+
+    updateSidebarCollapsed();
+    window.addEventListener("resize", updateSidebarCollapsed);
+    return () => {
+      window.removeEventListener("resize", updateSidebarCollapsed);
+    };
+  }, []);
 
   useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
@@ -429,7 +444,7 @@ export default function ConsolePage() {
   return (
     <div className="min-h-screen bg-[#f3f4f7]">
       <header className="sticky top-0 z-30 border-b border-slate-700 bg-[#111827] text-white">
-        <div className="flex h-14 items-center justify-between px-4 md:px-6">
+        <div className="mx-auto flex h-14 w-full max-w-[1840px] items-center justify-between px-8 md:px-12">
           <Link href="/" aria-label="메인으로 이동">
             <BrandLogo size="sm" className="text-white" />
           </Link>
@@ -468,7 +483,7 @@ export default function ConsolePage() {
         </div>
       </header>
 
-      <main className="grid min-h-[calc(100vh-56px)]" style={{ gridTemplateColumns: sidebarCollapsed ? "72px 1fr" : "248px 1fr" }}>
+      <main className="grid min-h-[calc(100vh-56px)] w-full" style={{ gridTemplateColumns: sidebarCollapsed ? "72px 1fr" : "248px 1fr" }}>
         <aside className="border-r border-slate-200 bg-[#f8f9fb] p-2">
           <div className="mb-2 flex items-center justify-end">
             <button
@@ -567,9 +582,9 @@ export default function ConsolePage() {
           </div>
         </aside>
 
-        <section className="bg-[#f3f4f7] p-4 md:p-6">
-          <div className="border border-slate-200 bg-white shadow-[0_18px_36px_-28px_rgba(15,23,42,0.45)]">
-            <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-5 py-4">
+        <section className="min-w-0 bg-[#f3f4f7] p-4 md:p-6">
+          <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-[0_26px_48px_-34px_rgba(15,23,42,0.48)]">
+            <div className="border-b border-slate-100 bg-white px-5 py-4">
               <h1 className="font-[var(--font-sora)] text-[15px] font-semibold tracking-[0.01em] text-slate-900">
                 <span className="text-slate-500">{activeCategory.label}</span>
                 <span className="px-2 text-slate-300">/</span>
@@ -586,7 +601,7 @@ export default function ConsolePage() {
                 <input
                   value={searchKeyword}
                   onChange={(event) => setSearchKeyword(event.target.value)}
-                  className="h-8 w-full border border-slate-300 bg-white pl-9 pr-3 text-[12px] text-slate-700 placeholder:text-slate-400 focus:border-[#4f83ff] focus:outline-none"
+                  className="h-9 w-full rounded-lg border border-slate-300/90 bg-white pl-9 pr-3 text-[12px] text-slate-700 placeholder:text-slate-400 transition focus:border-[#18499f] focus:outline-none focus:ring-2 focus:ring-[#18499f]/15"
                   placeholder="이름 또는 태그 검색"
                   aria-label="이름 또는 태그 검색"
                 />
@@ -599,7 +614,7 @@ export default function ConsolePage() {
                     router.refresh();
                     showToast("success", "목록을 새로고침했습니다.");
                   }}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-sm border border-slate-300 bg-white text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300/90 bg-white text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
                   aria-label="새로고침"
                 >
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9">
@@ -613,7 +628,7 @@ export default function ConsolePage() {
                     type="button"
                     disabled={!hasSelectedInstance}
                     onClick={() => showToast("success", "콘솔 연결을 시작합니다.")}
-                    className="inline-flex h-8 items-center justify-center rounded-sm border border-slate-300 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                    className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-300/90 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300"
                   >
                     콘솔 연결
                   </button>
@@ -625,7 +640,7 @@ export default function ConsolePage() {
                       type="button"
                       onClick={() => setOperationDropdownOpen((prev) => !prev)}
                       disabled={!hasSelectedInstance}
-                      className="inline-flex h-8 min-w-[180px] items-center justify-between gap-2 border border-slate-300 bg-white px-3 text-[12px] font-medium text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                      className="inline-flex h-9 min-w-[190px] items-center justify-between gap-2 rounded-lg border border-slate-300/90 bg-white px-3 text-[12px] font-medium text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300"
                       aria-label="인스턴스 상태 드롭다운"
                       aria-haspopup="menu"
                       aria-expanded={operationDropdownOpen}
@@ -637,7 +652,7 @@ export default function ConsolePage() {
                     </button>
 
                     {operationDropdownOpen && hasSelectedInstance ? (
-                      <div className="absolute right-0 top-9 z-20 min-w-[180px] border border-slate-200 bg-white py-1 shadow-[0_12px_24px_-16px_rgba(15,23,42,0.5)]">
+                      <div className="absolute right-0 top-10 z-20 min-w-[190px] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-[0_18px_32px_-20px_rgba(15,23,42,0.45)]">
                         {["인스턴스 중지", "인스턴스 재부팅", "인스턴스 삭제"].map((label) => (
                           <button
                             key={label}
@@ -645,7 +660,7 @@ export default function ConsolePage() {
                             onClick={() => {
                               setOperationDropdownOpen(false);
                             }}
-                            className="flex h-8 w-full items-center px-3 text-left text-[12px] text-slate-700 transition hover:bg-slate-50"
+                            className="flex h-9 w-full items-center px-3 text-left text-[12px] text-slate-700 transition hover:bg-slate-50"
                           >
                             {label}
                           </button>
@@ -662,7 +677,7 @@ export default function ConsolePage() {
                     onClick={() => {
                       showToast("success", `인스턴스 작업 요청: ${activeRowId}`);
                     }}
-                    className="inline-flex h-8 items-center justify-center border border-slate-300 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                    className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-300/90 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300"
                   >
                     인스턴스 작업
                   </button>
@@ -672,7 +687,7 @@ export default function ConsolePage() {
                   <button
                     type="button"
                     onClick={() => showToast("success", "인스턴스 생성 화면으로 이동합니다.")}
-                    className="inline-flex h-8 items-center justify-center border border-[#2d65d8] bg-[#2d65d8] px-3 text-[12px] font-semibold text-white transition hover:bg-[#2456ba]"
+                    className="inline-flex h-9 items-center justify-center rounded-lg border border-[#123b84] bg-[#123b84] px-3 text-[12px] font-semibold text-white shadow-[0_10px_18px_-14px_rgba(18,59,132,0.9)] transition hover:border-[#0f3170] hover:bg-[#0f3170]"
                   >
                     인스턴스 생성
                   </button>
@@ -680,22 +695,22 @@ export default function ConsolePage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto px-5 pt-0">
-              <table className="min-w-[1460px] w-full border-separate border-spacing-0 border border-slate-200 bg-white text-[12px] font-[var(--font-body)] text-slate-700">
-              <thead className="bg-[#f6f8fb] text-slate-500">
+            <div className="overflow-x-auto px-5 pb-1 pt-2">
+              <table className="min-w-[1460px] w-full border-separate border-spacing-0 overflow-hidden rounded-lg border border-slate-200/80 bg-white text-[12px] font-[var(--font-body)] text-slate-700">
+              <thead className="bg-white text-slate-400">
                 <tr>
-                  <th className="border-b border-r border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">이름</th>
-                  <th className="border-b border-r border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">상태</th>
-                  <th className="border-b border-r border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">인스턴스 ID</th>
-                  <th className="border-b border-r border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">태그</th>
-                  <th className="border-b border-r border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">OS 명</th>
-                  <th className="border-b border-r border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">OS 버전</th>
-                  <th className="border-b border-r border-slate-200 px-3 py-2 text-right text-[11px] font-semibold tracking-[0.02em]">CPU Cores</th>
-                  <th className="border-b border-r border-slate-200 px-3 py-2 text-right text-[11px] font-semibold tracking-[0.02em]">Memory Size </th>
-                  <th className="border-b border-r border-slate-200 px-3 py-2 text-right text-[11px] font-semibold tracking-[0.02em]">Storage Size</th>
-                  <th className="border-b border-r border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">Public IP</th>
-                  <th className="border-b border-r border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">Private IP</th>
-                  <th className="border-b border-slate-200 px-3 py-2 text-left text-[11px] font-semibold tracking-[0.02em]">VPC 명</th>
+                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">이름</th>
+                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">상태</th>
+                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">태그</th>
+                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">OS 명</th>
+                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">OS 버전</th>
+                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[10px] font-semibold tracking-[0.08em]">CPU Cores</th>
+                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[10px] font-semibold tracking-[0.08em]">Memory Size </th>
+                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[10px] font-semibold tracking-[0.08em]">Storage Size</th>
+                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">Public IP</th>
+                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">Private IP</th>
+                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">VPC 명</th>
+                  <th className="border-b border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">인스턴스 ID</th>
                 </tr>
               </thead>
               <tbody>
@@ -704,48 +719,48 @@ export default function ConsolePage() {
                   <tr
                     key={instance.instanceId}
                     onClick={() => setActiveRowId(instance.instanceId)}
-                    className={`cursor-pointer ${
+                    className={`cursor-pointer transition-colors hover:bg-slate-50 ${
                       activeRowId === instance.instanceId
-                        ? "bg-[#eaf2ff] ring-1 ring-inset ring-[#b9d1ff]"
+                        ? "bg-[#f5f8ff] shadow-[inset_2px_0_0_#123b84]"
                         : "bg-white"
                     }`}
                   >
-                    <td className="border-b border-r border-slate-100 px-3 py-2 text-[12px] font-semibold text-slate-700">{instance.name}</td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2 text-[12px]">
+                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] font-semibold text-slate-800">{instance.name}</td>
+                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px]">
                       <span
-                        className={`inline-flex items-center rounded-sm px-2 py-0.5 text-[10px] font-semibold ${
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
                           instance.status === "running"
-                            ? "bg-emerald-50 text-emerald-700"
+                            ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
                             : instance.status === "stopped"
-                              ? "bg-slate-100 text-slate-600"
-                              : "bg-amber-50 text-amber-700"
+                              ? "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
+                              : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
                         }`}
                       >
                         {instance.status === "running" ? "실행 중" : instance.status === "stopped" ? "중지" : "재부팅 중"}
                       </span>
                     </td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2 text-[12px] text-slate-900">{instance.instanceId}</td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2 text-[12px]">
+                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px]">
                       <div className="flex flex-wrap gap-1">
                         {instance.tags.map((tag) => (
-                          <span key={tag} className="inline-flex items-center rounded-sm border border-[#dbe2f1] bg-[#f4f7fb] px-2 py-0.5 text-[10px] font-medium text-[#475569]">
+                          <span key={tag} className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600">
                             {tag}
                           </span>
                         ))}
                       </div>
                     </td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2 text-[12px] text-slate-700">{instance.osName}</td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2 text-[12px] text-slate-700">{instance.osVersion}</td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2 text-right text-[12px] text-slate-700">{instance.cpuCores}</td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2 text-right text-[12px] text-slate-700">{instance.memorySizeGb}</td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2 text-right text-[12px] text-slate-700">{instance.storageSizeGb}</td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2 text-[12px] text-slate-700">{instance.publicIp}</td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2 text-[12px] text-slate-700">{instance.privateIp}</td>
-                    <td className="border-b border-slate-100 px-3 py-2 text-[12px] text-slate-700">{instance.vpcName}</td>
+                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.osName}</td>
+                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.osVersion}</td>
+                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[12px] text-slate-700">{instance.cpuCores}</td>
+                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[12px] text-slate-700">{instance.memorySizeGb}</td>
+                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[12px] text-slate-700">{instance.storageSizeGb}</td>
+                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.publicIp}</td>
+                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.privateIp}</td>
+                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.vpcName}</td>
+                    <td className="border-b border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.instanceId}</td>
                   </tr>
                 ))) : (
                   <tr>
-                    <td className="h-9 border-b border-slate-100 px-3 py-2 text-center text-[12px] text-slate-500" colSpan={12}>
+                    <td className="h-11 border-b border-slate-100 px-3 py-2 text-center text-[12px] text-slate-500" colSpan={12}>
                       표시할 인스턴스가 없습니다.
                     </td>
                   </tr>
@@ -753,18 +768,18 @@ export default function ConsolePage() {
 
                 {Array.from({ length: emptyRowCount }).map((_, index) => (
                   <tr key={`empty-row-${index}`} className="bg-white">
-                    <td className="h-9 border-b border-r border-slate-100 px-3 py-2" />
-                    <td className="h-9 border-b border-r border-slate-100 px-3 py-2" />
-                    <td className="h-9 border-b border-r border-slate-100 px-3 py-2" />
-                    <td className="h-9 border-b border-r border-slate-100 px-3 py-2" />
-                    <td className="h-9 border-b border-r border-slate-100 px-3 py-2" />
-                    <td className="h-9 border-b border-r border-slate-100 px-3 py-2" />
-                    <td className="h-9 border-b border-r border-slate-100 px-3 py-2" />
-                    <td className="h-9 border-b border-r border-slate-100 px-3 py-2" />
-                    <td className="h-9 border-b border-r border-slate-100 px-3 py-2" />
-                    <td className="h-9 border-b border-r border-slate-100 px-3 py-2" />
-                    <td className="h-9 border-b border-r border-slate-100 px-3 py-2" />
-                    <td className="h-9 border-b border-slate-100 px-3 py-2" />
+                    <td className="h-11 border-b border-r border-slate-100 px-3 py-2" />
+                    <td className="h-11 border-b border-r border-slate-100 px-3 py-2" />
+                    <td className="h-11 border-b border-r border-slate-100 px-3 py-2" />
+                    <td className="h-11 border-b border-r border-slate-100 px-3 py-2" />
+                    <td className="h-11 border-b border-r border-slate-100 px-3 py-2" />
+                    <td className="h-11 border-b border-r border-slate-100 px-3 py-2" />
+                    <td className="h-11 border-b border-r border-slate-100 px-3 py-2" />
+                    <td className="h-11 border-b border-r border-slate-100 px-3 py-2" />
+                    <td className="h-11 border-b border-r border-slate-100 px-3 py-2" />
+                    <td className="h-11 border-b border-r border-slate-100 px-3 py-2" />
+                    <td className="h-11 border-b border-r border-slate-100 px-3 py-2" />
+                    <td className="h-11 border-b border-slate-100 px-3 py-2" />
                   </tr>
                 ))}
               </tbody>
@@ -772,12 +787,12 @@ export default function ConsolePage() {
             </div>
 
             <div className="flex items-center justify-end bg-white px-5 pb-6 pt-3">
-              <div className="inline-flex items-center gap-1 border border-slate-200 bg-[#f6f7f9] px-2 py-1 text-[12px] text-slate-600">
+              <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50/70 px-2 py-1 text-[12px] text-slate-600">
                 <button
                   type="button"
                   onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                   disabled={currentPage === 1}
-                  className="inline-flex h-5 w-5 items-center justify-center text-slate-400 transition hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-400 transition hover:bg-white hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                   aria-label="이전 페이지"
                 >
                   <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
@@ -790,7 +805,11 @@ export default function ConsolePage() {
                     key={page}
                     type="button"
                     onClick={() => setCurrentPage(page)}
-                    className={`inline-flex h-5 min-w-5 items-center justify-center px-1 ${page === currentPage ? "font-semibold text-slate-900" : "text-slate-500 hover:text-slate-800"}`}
+                    className={`inline-flex h-6 min-w-6 items-center justify-center rounded px-1 ${
+                      page === currentPage
+                        ? "bg-white font-semibold text-[#123b84] shadow-sm"
+                        : "text-slate-500 hover:bg-white hover:text-slate-800"
+                    }`}
                   >
                     {page}
                   </button>
@@ -802,7 +821,7 @@ export default function ConsolePage() {
                   type="button"
                   onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                   disabled={currentPage === totalPages}
-                  className="inline-flex h-5 w-5 items-center justify-center text-slate-500 transition hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-500 transition hover:bg-white hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                   aria-label="다음 페이지"
                 >
                   <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
