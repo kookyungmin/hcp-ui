@@ -8,11 +8,16 @@ export async function getInstanceMetaAllApi() {
 }
 
 export async function provisionInstanceApi(payload: GenerateInstanceRequest, idempotencyKey: string) {
+  const normalizedTags = (payload.tags ?? [])
+    .map((t) => (typeof t === "string" ? t.trim() : ""))
+    .filter((t) => t.length > 0);
+  const tagsValue: string | null = normalizedTags.length > 0 ? normalizedTags.join(",") : null;
+
   const response = await apiClient.post<ApiEnvelope<unknown>>(
     "/computes/v1/instance/provisioning",
     {
       ...payload,
-      tags: payload.tags.join(",")
+      tags: tagsValue
     },
     {
       headers: {

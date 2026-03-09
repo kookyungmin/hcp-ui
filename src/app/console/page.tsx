@@ -305,7 +305,7 @@ export default function ConsolePage() {
           instanceId: item.instanceId,
           name: item.name,
           status: item.status,
-          tags: item.tags ?? [],
+          tags: (item.tags ?? []).map((t) => t?.trim?.() ?? "").filter((t) => t.length > 0),
           osName: item.osName,
           osVersion: item.osVersion,
           cpuCores: Number.parseInt(item.cpu, 10) || 0,
@@ -835,13 +835,15 @@ export default function ConsolePage() {
                       })()}
                     </td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px]">
-                      <div className="flex flex-wrap gap-1">
-                        {instance.tags.map((tag) => (
-                          <span key={tag} className="inline-flex items-center rounded-none border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
+                      {instance.tags.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {instance.tags.map((tag) => (
+                            <span key={tag} className="inline-flex items-center rounded-none border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.osName}</td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.osVersion}</td>
