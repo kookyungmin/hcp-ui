@@ -8,6 +8,7 @@ import { BrandLogo } from "@/shared/ui/brand-logo";
 import { SERVICE_CATEGORIES } from "@/shared/constants/service-catalog";
 import { useAuthStore } from "@/shared/stores/auth.store";
 import { hasServicePermission } from "@/shared/lib/permission";
+import { getInstanceMetaAllApi, provisionInstanceApi } from "@/shared/api/instance.api";
 import type { GenerateInstanceRequest, InstanceMeta } from "@/shared/types/instance";
 
 function CategoryIcon({ id }: { id: string }) {
@@ -230,48 +231,11 @@ const MOCK_INSTANCES: ServerInstance[] = [
   }
 ];
 
-const MOCK_INSTANCE_META: InstanceMeta = {
-  osImageList: [
-    {
-      imageCode: "rocky:8.10",
-      osName: "Rocky Linux",
-      osVersion: "8.10",
-      description: "Rocky Linux 8.10 LTS"
-    },
-    {
-      imageCode: "ubuntu:22.04",
-      osName: "Ubuntu",
-      osVersion: "22.04",
-      description: "Ubuntu 22.04 LTS"
-    }
-  ],
-  specList: [
-    {
-      specCode: "h1.large",
-      specName: "h1.large",
-      description: "CPU: 4cores, Memory: 2GB"
-    },
-    {
-      specCode: "h1.micro",
-      specName: "h1.micro",
-      description: "CPU: 1cores, Memory: 256MB"
-    },
-    {
-      specCode: "h1.small",
-      specName: "h1.small",
-      description: "CPU: 2cores, Memory: 512MB"
-    }
-  ],
-  vpcList: [
-    {
-      vpcCode: "vpc-default",
-      vpcName: "Default VPC",
-      description: "Default VPC (No Edit)",
-      cidrBlock: "10.244.0.0/16",
-      defaultEgressPolicy: "ALLOW_ALL",
-      defaultIngressPolicy: "DENY_ALL"
-    }
-  ]
+const createIdempotencyKey = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
 export default function ConsolePage() {
@@ -311,8 +275,12 @@ export default function ConsolePage() {
   const storageType: "HDD" = "HDD";
   const [storageSize, setStorageSize] = useState(50);
   const [createFormErrors, setCreateFormErrors] = useState<{ instanceName?: string; storageSize?: string }>({});
+  const [createRequesting, setCreateRequesting] = useState(false);
+  const [createRequestError, setCreateRequestError] = useState<string | null>(null);
+  const [idempotencyKey, setIdempotencyKey] = useState("");
   const profileWrapperRef = useRef<HTMLDivElement | null>(null);
   const operationDropdownRef = useRef<HTMLDivElement | null>(null);
+  const createSubmitLockRef = useRef(false);
   const readPermissionDeniedRef = useRef(false);
   const instances = MOCK_INSTANCES;
   const firstReadableTarget = useMemo(() => {
@@ -485,7 +453,7 @@ export default function ConsolePage() {
       setMetaLoadError(null);
 
       try {
-        const meta = await Promise.resolve(MOCK_INSTANCE_META);
+        const meta = await getInstanceMetaAllApi();
         if (!mounted) return;
         setInstanceMeta(meta);
         setSelectedImageCode((prev) => prev || meta.osImageList[0]?.imageCode || "");
@@ -505,6 +473,27 @@ export default function ConsolePage() {
       mounted = false;
     };
   }, [isCreateMode]);
+
+  useEffect(() => {
+    if (!isCreateMode) {
+      setCreateRequesting(false);
+      setCreateRequestError(null);
+      setIdempotencyKey("");
+      createSubmitLockRef.current = false;
+      setInstanceName("");
+      setTags([]);
+      setTagInput("");
+      setStorageSize(50);
+      setCreateFormErrors({});
+      setSelectedImageCode(instanceMeta?.osImageList[0]?.imageCode || "");
+      setSelectedSpecCode(instanceMeta?.specList[0]?.specCode || "");
+      setSelectedVpcCode(instanceMeta?.vpcList[0]?.vpcCode || "");
+      return;
+    }
+
+    setCreateRequestError(null);
+    setIdempotencyKey(createIdempotencyKey());
+  }, [isCreateMode, instanceMeta]);
 
   const toggleCategory = (categoryId: string) => {
     setCollapsedCategories((prev) => ({
@@ -571,6 +560,40 @@ export default function ConsolePage() {
       return "/images/os/rocky-linux.svg";
     }
     return null;
+  };
+  const resetCreateForm = () => {
+    setInstanceName("");
+    setTags([]);
+    setTagInput("");
+    setStorageSize(50);
+    setCreateFormErrors({});
+    setSelectedImageCode(instanceMeta?.osImageList[0]?.imageCode || "");
+    setSelectedSpecCode(instanceMeta?.specList[0]?.specCode || "");
+    setSelectedVpcCode(instanceMeta?.vpcList[0]?.vpcCode || "");
+  };
+  const handleCreateSubmit = async () => {
+    if (createSubmitLockRef.current || createRequesting) return;
+    if (!validateCreateForm()) return;
+
+    const requestKey = idempotencyKey || createIdempotencyKey();
+    if (!idempotencyKey) {
+      setIdempotencyKey(requestKey);
+    }
+
+    createSubmitLockRef.current = true;
+    setCreateRequesting(true);
+    setCreateRequestError(null);
+
+    try {
+      await provisionInstanceApi(generatedRequest, requestKey);
+      resetCreateForm();
+      moveToInstanceView("list");
+    } catch {
+      setCreateRequestError("인스턴스 생성 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      createSubmitLockRef.current = false;
+      setCreateRequesting(false);
+    }
   };
 
   if (!initialized || isInitializing) {
@@ -1011,11 +1034,9 @@ export default function ConsolePage() {
                     <form
                       id="instance-create-form"
                       className="space-y-5"
-                      onSubmit={(event) => {
+                      onSubmit={async (event) => {
                         event.preventDefault();
-                        if (!validateCreateForm()) {
-                          return;
-                        }
+                        await handleCreateSubmit();
                       }}
                     >
                       <fieldset className="border border-slate-400 bg-white px-3 pb-3 pt-1 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.5)]">
@@ -1215,15 +1236,17 @@ export default function ConsolePage() {
                         <button
                           type="button"
                           onClick={() => moveToInstanceView("list")}
+                          disabled={createRequesting}
                           className="inline-flex h-9 items-center justify-center rounded-none border border-slate-300 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
                         >
                           목록으로
                         </button>
                         <button
                           type="submit"
+                          disabled={createRequesting}
                           className="inline-flex h-9 items-center justify-center rounded-none border border-[#123b84] bg-[#123b84] px-3 text-[12px] font-semibold text-white shadow-[0_10px_18px_-14px_rgba(18,59,132,0.9)] transition hover:border-[#0f3170] hover:bg-[#0f3170]"
                         >
-                          인스턴스 생성 요청
+                          {createRequesting ? "생성 요청 중..." : "인스턴스 생성 요청"}
                         </button>
                       </div>
                     </form>
@@ -1255,6 +1278,7 @@ export default function ConsolePage() {
                       <button
                         type="button"
                         onClick={() => moveToInstanceView("list")}
+                        disabled={createRequesting}
                         className="inline-flex h-9 items-center justify-center rounded-none border border-slate-300 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
                       >
                         목록으로
@@ -1262,11 +1286,15 @@ export default function ConsolePage() {
                       <button
                         type="submit"
                         form="instance-create-form"
+                        disabled={createRequesting}
                         className="inline-flex h-9 items-center justify-center rounded-none border border-[#123b84] bg-[#123b84] px-3 text-[12px] font-semibold text-white shadow-[0_10px_18px_-14px_rgba(18,59,132,0.9)] transition hover:border-[#0f3170] hover:bg-[#0f3170]"
                       >
-                        인스턴스 생성 요청
+                        {createRequesting ? "생성 요청 중..." : "인스턴스 생성 요청"}
                       </button>
                     </div>
+                    {createRequestError ? (
+                      <p className="mt-2 text-[11px] text-rose-600">{createRequestError}</p>
+                    ) : null}
                   </aside>
                 </>
               )}

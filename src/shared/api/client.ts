@@ -74,7 +74,7 @@ apiClient.interceptors.response.use(
         }
 
         const refreshMessage = refreshAxiosError.response?.data?.message;
-        if (refreshMessage) {
+        if (refreshMessage && refreshMessage !== "리프레시 토큰이 유효하지 않습니다") {
           useToastStore.getState().showToast("error", refreshMessage);
         }
         return Promise.reject(refreshError);
