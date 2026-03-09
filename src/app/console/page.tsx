@@ -8,8 +8,8 @@ import { BrandLogo } from "@/shared/ui/brand-logo";
 import { SERVICE_CATEGORIES } from "@/shared/constants/service-catalog";
 import { useAuthStore } from "@/shared/stores/auth.store";
 import { hasServicePermission } from "@/shared/lib/permission";
-import { getInstanceMetaAllApi, provisionInstanceApi } from "@/shared/api/instance.api";
-import type { GenerateInstanceRequest, InstanceMeta } from "@/shared/types/instance";
+import { getInstanceListApi, getInstanceMetaAllApi, provisionInstanceApi } from "@/shared/api/instance.api";
+import type { GenerateInstanceRequest, InstanceMeta, InstanceStatus } from "@/shared/types/instance";
 
 function CategoryIcon({ id }: { id: string }) {
   switch (id) {
@@ -62,174 +62,20 @@ function CategoryIcon({ id }: { id: string }) {
 type ServerInstance = {
   instanceId: string;
   name: string;
-  status: "running" | "stopped" | "rebooting";
+  status: InstanceStatus;
   tags: string[];
   osName: string;
   osVersion: string;
   cpuCores: number;
-  memorySizeGb: number;
+  memorySize: string; // keep original unit like "256Mi"
   storageSizeGb: number;
   publicIp: string;
   privateIp: string;
   vpcName: string;
 };
 
-const MOCK_INSTANCES: ServerInstance[] = [
-  {
-    instanceId: "i-0a12b34c56d78ef90",
-    name: "web-prod-1",
-    status: "running",
-    tags: ["prod", "frontend", "critical"],
-    osName: "Ubuntu",
-    osVersion: "22.04 LTS",
-    cpuCores: 4,
-    memorySizeGb: 8,
-    storageSizeGb: 120,
-    publicIp: "52.79.120.44",
-    privateIp: "10.0.12.34",
-    vpcName: "vpc-main-prod"
-  },
-  {
-    instanceId: "i-0123ab45cd67ef890",
-    name: "api-stg-2",
-    status: "stopped",
-    tags: ["staging", "api"],
-    osName: "Rocky Linux",
-    osVersion: "9.4",
-    cpuCores: 2,
-    memorySizeGb: 4,
-    storageSizeGb: 80,
-    publicIp: "-",
-    privateIp: "10.0.21.17",
-    vpcName: "vpc-main-stg"
-  },
-  {
-    instanceId: "i-06db6c3a49e88fa12",
-    name: "worker-prod-1",
-    status: "running",
-    tags: ["prod", "worker", "batch"],
-    osName: "Ubuntu",
-    osVersion: "20.04 LTS",
-    cpuCores: 8,
-    memorySizeGb: 16,
-    storageSizeGb: 200,
-    publicIp: "13.124.51.12",
-    privateIp: "10.0.14.9",
-    vpcName: "vpc-main-prod"
-  },
-  {
-    instanceId: "i-0b21f0abce55d921f",
-    name: "bastion-ops",
-    status: "running",
-    tags: ["ops", "security"],
-    osName: "Amazon Linux",
-    osVersion: "2023",
-    cpuCores: 2,
-    memorySizeGb: 4,
-    storageSizeGb: 60,
-    publicIp: "3.37.112.22",
-    privateIp: "10.0.1.8",
-    vpcName: "vpc-shared-ops"
-  },
-  {
-    instanceId: "i-053f3f64ca9f2140f",
-    name: "db-proxy-1",
-    status: "rebooting",
-    tags: ["prod", "database", "proxy"],
-    osName: "Ubuntu",
-    osVersion: "22.04 LTS",
-    cpuCores: 4,
-    memorySizeGb: 8,
-    storageSizeGb: 100,
-    publicIp: "-",
-    privateIp: "10.0.31.11",
-    vpcName: "vpc-data-prod"
-  },
-  {
-    instanceId: "i-0e3d42b654bb389f3",
-    name: "qa-api-1",
-    status: "stopped",
-    tags: ["qa", "api"],
-    osName: "Rocky Linux",
-    osVersion: "8.9",
-    cpuCores: 2,
-    memorySizeGb: 4,
-    storageSizeGb: 80,
-    publicIp: "43.202.15.209",
-    privateIp: "10.0.22.41",
-    vpcName: "vpc-main-qa"
-  },
-  {
-    instanceId: "i-0c9a47fefcf84f1a1",
-    name: "web-dev-3",
-    status: "running",
-    tags: ["dev", "frontend"],
-    osName: "Ubuntu",
-    osVersion: "22.04 LTS",
-    cpuCores: 2,
-    memorySizeGb: 4,
-    storageSizeGb: 50,
-    publicIp: "15.164.77.10",
-    privateIp: "10.0.42.16",
-    vpcName: "vpc-main-dev"
-  },
-  {
-    instanceId: "i-0de46109a4db9d991",
-    name: "jenkins-build",
-    status: "running",
-    tags: ["ci", "build", "ops"],
-    osName: "Ubuntu",
-    osVersion: "22.04 LTS",
-    cpuCores: 4,
-    memorySizeGb: 16,
-    storageSizeGb: 300,
-    publicIp: "52.78.32.130",
-    privateIp: "10.0.3.21",
-    vpcName: "vpc-shared-ops"
-  },
-  {
-    instanceId: "i-0247e7cb124bc58a4",
-    name: "cache-proxy-1",
-    status: "running",
-    tags: ["prod", "cache"],
-    osName: "Amazon Linux",
-    osVersion: "2",
-    cpuCores: 2,
-    memorySizeGb: 8,
-    storageSizeGb: 80,
-    publicIp: "-",
-    privateIp: "10.0.33.18",
-    vpcName: "vpc-data-prod"
-  },
-  {
-    instanceId: "i-0a7dd70cb4a259f12",
-    name: "log-collector",
-    status: "rebooting",
-    tags: ["observability", "prod"],
-    osName: "Ubuntu",
-    osVersion: "20.04 LTS",
-    cpuCores: 4,
-    memorySizeGb: 8,
-    storageSizeGb: 150,
-    publicIp: "-",
-    privateIp: "10.0.70.6",
-    vpcName: "vpc-observe-prod"
-  },
-  {
-    instanceId: "i-046f3f3f2f11b3aa0",
-    name: "dev-testbox",
-    status: "stopped",
-    tags: ["dev", "sandbox"],
-    osName: "Windows Server",
-    osVersion: "2022",
-    cpuCores: 2,
-    memorySizeGb: 8,
-    storageSizeGb: 120,
-    publicIp: "54.180.201.77",
-    privateIp: "10.0.52.73",
-    vpcName: "vpc-main-dev"
-  }
-];
+// NOTE: Replaced by live API fetching; keeping structure reference only.
+// const MOCK_INSTANCES: ServerInstance[] = [];
 
 const createIdempotencyKey = () => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -282,7 +128,10 @@ export default function ConsolePage() {
   const operationDropdownRef = useRef<HTMLDivElement | null>(null);
   const createSubmitLockRef = useRef(false);
   const readPermissionDeniedRef = useRef(false);
-  const instances = MOCK_INSTANCES;
+  const [instances, setInstances] = useState<ServerInstance[]>([]);
+  const [instancesLoading, setInstancesLoading] = useState(false);
+  const [instancesLoadError, setInstancesLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const firstReadableTarget = useMemo(() => {
     for (const category of SERVICE_CATEGORIES) {
       for (const service of category.services) {
@@ -329,21 +178,14 @@ export default function ConsolePage() {
     activeCategory.services.find((service) => service.id === activeServiceId) ?? activeCategory.services[0];
   const pageSize = 10;
   const hasSelectedInstance = Boolean(activeRowId);
-  const filteredInstances = useMemo(() => {
-    const query = searchKeyword.trim().toLowerCase();
-    if (!query) return instances;
-
-    return instances.filter((instance) => {
-      const byName = instance.name.toLowerCase().includes(query);
-      const byTag = instance.tags.some((tag) => tag.toLowerCase().includes(query));
-      return byName || byTag;
-    });
-  }, [instances, searchKeyword]);
-  const totalPages = Math.max(1, Math.ceil(filteredInstances.length / pageSize));
-  const pagedInstances = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredInstances.slice(start, start + pageSize);
-  }, [filteredInstances, currentPage]);
+  const selectedInstance = useMemo(
+    () => instances.find((i) => i.instanceId === activeRowId) ?? null,
+    [instances, activeRowId]
+  );
+  const canConsoleConnect = Boolean(selectedInstance && selectedInstance.status === "RUNNING");
+  const filteredInstances = useMemo(() => instances, [instances]);
+  const [totalPages, setTotalPages] = useState(1);
+  const pagedInstances = filteredInstances;
   const emptyRowCount = Math.max(0, pageSize - pagedInstances.length - (pagedInstances.length === 0 ? 1 : 0));
   const visiblePages = useMemo(() => {
     const pages = [1];
@@ -442,6 +284,55 @@ export default function ConsolePage() {
     setActiveCategoryId(matchedCategory.id);
     setActiveServiceId(matchedService.id);
   }, [searchParams, loginUser?.roles, fallbackTarget.categoryId, fallbackTarget.serviceId]);
+
+  // Fetch instance list (list mode only)
+  useEffect(() => {
+    if (!isServerInstanceService || isCreateMode) return;
+    let mounted = true;
+    setInstancesLoading(true);
+    setInstancesLoadError(null);
+
+    (async () => {
+      try {
+        const body = await getInstanceListApi({
+          searchKeyword: searchKeyword.trim(),
+          page: Math.max(0, currentPage - 1),
+          size: pageSize
+        });
+
+        if (!mounted) return;
+        const mapped: ServerInstance[] = body.content.map((item) => ({
+          instanceId: item.instanceId,
+          name: item.name,
+          status: item.status,
+          tags: item.tags ?? [],
+          osName: item.osName,
+          osVersion: item.osVersion,
+          cpuCores: Number.parseInt(item.cpu, 10) || 0,
+          memorySize: item.memory,
+          storageSizeGb: item.storageSize,
+          publicIp: item.publicIp ?? "-",
+          privateIp: item.privateIp ?? "-",
+          vpcName: item.vpcName
+        }));
+
+        setInstances(mapped);
+        setTotalPages(Math.max(1, body.totalPages ?? 1));
+        if (activeRowId && !mapped.some((i) => i.instanceId === activeRowId)) {
+          setActiveRowId(null);
+        }
+      } catch {
+        if (!mounted) return;
+        setInstancesLoadError("인스턴스 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      } finally {
+        if (mounted) setInstancesLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [isServerInstanceService, isCreateMode, searchKeyword, currentPage, pageSize, reloadKey]);
 
   useEffect(() => {
     if (!isCreateMode) return;
@@ -806,7 +697,7 @@ export default function ConsolePage() {
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => router.refresh()}
+                  onClick={() => setReloadKey((k) => k + 1)}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-none border border-slate-300/90 bg-white text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
                   aria-label="새로고침"
                 >
@@ -819,7 +710,7 @@ export default function ConsolePage() {
                 {canExecuteService ? (
                   <button
                     type="button"
-                    disabled={!hasSelectedInstance}
+                    disabled={!canConsoleConnect}
                     className="inline-flex h-9 items-center justify-center rounded-none border border-slate-300/90 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300"
                   >
                     콘솔 연결
@@ -895,7 +786,7 @@ export default function ConsolePage() {
                   <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">OS 버전</th>
                   <th className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[10px] font-semibold tracking-[0.08em]">CPU Cores</th>
                   <th className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[10px] font-semibold tracking-[0.08em]">Memory Size </th>
-                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[10px] font-semibold tracking-[0.08em]">Storage Size</th>
+                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[10px] font-semibold tracking-[0.08em]">Storage Size (GB)</th>
                   <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">Public IP</th>
                   <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">Private IP</th>
                   <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">VPC 명</th>
@@ -916,17 +807,32 @@ export default function ConsolePage() {
                   >
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] font-semibold text-slate-800">{instance.name}</td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px]">
-                      <span
-                        className={`inline-flex items-center rounded-none px-2.5 py-0.5 text-[10px] font-semibold ${
-                          instance.status === "running"
+                      {(() => {
+                        const s = instance.status;
+                        const labelMap: Record<string, string> = {
+                          PROVISIONING: "프로비저닝 중",
+                          RUNNING: "실행 중",
+                          STOPPING: "중지 중",
+                          STOPPED: "중지",
+                          TERMINATING: "종료 중",
+                          TERMINATED: "종료됨",
+                          FAILED: "실패",
+                          FAILE: "실패"
+                        };
+                        const colorClass =
+                          s === "RUNNING"
                             ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                            : instance.status === "stopped"
+                            : s === "STOPPED" || s === "TERMINATED"
                               ? "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
-                              : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                        }`}
-                      >
-                        {instance.status === "running" ? "실행 중" : instance.status === "stopped" ? "중지" : "재부팅 중"}
-                      </span>
+                              : s === "FAILED" || s === "FAILE"
+                                ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+                                : "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+                        return (
+                          <span className={`inline-flex items-center rounded-none px-2.5 py-0.5 text-[10px] font-semibold ${colorClass}`}>
+                            {labelMap[s] ?? s}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px]">
                       <div className="flex flex-wrap gap-1">
@@ -940,7 +846,7 @@ export default function ConsolePage() {
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.osName}</td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.osVersion}</td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[12px] text-slate-700">{instance.cpuCores}</td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[12px] text-slate-700">{instance.memorySizeGb}</td>
+                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[12px] text-slate-700">{instance.memorySize}</td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[12px] text-slate-700">{instance.storageSizeGb}</td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.publicIp}</td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.privateIp}</td>
@@ -950,7 +856,9 @@ export default function ConsolePage() {
                 ))) : (
                   <tr>
                     <td className="h-11 border-b border-slate-100 px-3 py-2 text-center text-[12px] text-slate-500" colSpan={12}>
-                      표시할 인스턴스가 없습니다.
+                      {instancesLoading
+                        ? "인스턴스 목록을 불러오는 중입니다..."
+                        : instancesLoadError ?? "표시할 인스턴스가 없습니다."}
                     </td>
                   </tr>
                 )}
