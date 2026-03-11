@@ -48,4 +48,16 @@ src
 
 ![img_2.png](image/img_2.png)
 
+* 서버 인스턴스 목록 / 생성
+
+![img.png](image/img1.png)
+
+![img_1.png](image/img1_1.png)
+
+![img_2.png](image/img1_2.png)
+
+* 인스턴스 콘솔 연결
+
+![img_3.png](image/img1_3.png)
+
 

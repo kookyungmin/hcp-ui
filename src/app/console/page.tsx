@@ -1,6 +1,9 @@
 "use client";
 
 import Image from "next/image";
+import "xterm/css/xterm.css";
+import { Terminal } from "xterm";
+import { FitAddon } from "@xterm/addon-fit";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -8,6 +11,8 @@ import { BrandLogo } from "@/shared/ui/brand-logo";
 import { SERVICE_CATEGORIES } from "@/shared/constants/service-catalog";
 import { useAuthStore } from "@/shared/stores/auth.store";
 import { hasServicePermission } from "@/shared/lib/permission";
+import { getAccessToken, setAccessToken } from "@/shared/lib/access-token";
+import { refreshTokenApi } from "@/shared/api/auth.api";
 import { getInstanceListApi, getInstanceMetaAllApi, provisionInstanceApi } from "@/shared/api/instance.api";
 import type { GenerateInstanceRequest, InstanceMeta, InstanceStatus } from "@/shared/types/instance";
 
@@ -149,6 +154,7 @@ export default function ConsolePage() {
   const canWriteService = hasServicePermission(loginUser?.roles, activeCategoryId, activeServiceId, "write");
   const isServerInstanceService = activeCategoryId === "compute" && activeServiceId === "server";
   const isCreateMode = searchParams.get("mode") === "create" && isServerInstanceService;
+  const isConsoleMode = searchParams.get("mode") === "console" && isServerInstanceService;
 
   useEffect(() => {
     if (initialized && !isInitializing && !loginUser) {
@@ -183,6 +189,29 @@ export default function ConsolePage() {
     [instances, activeRowId]
   );
   const canConsoleConnect = Boolean(selectedInstance && selectedInstance.status === "RUNNING");
+  // WebSocket state for console
+  const [wsConnected, setWsConnected] = useState(false);
+  const [wsReady, setWsReady] = useState(false);
+  const [wsError, setWsError] = useState<string | null>(null);
+  const [wsClosed, setWsClosed] = useState(false);
+  const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
+  const wsRef = useRef<WebSocket | null>(null);
+  const termRef = useRef<Terminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+  const termContainerRef = useRef<HTMLDivElement | null>(null);
+  const decoderRef = useRef<TextDecoder | null>(null);
+  const resizeObsRef = useRef<ResizeObserver | null>(null);
+  // Inactivity timer (5 minutes)
+  const INACTIVITY_LIMIT_SEC = 5 * 60;
+  const [remainSec, setRemainSec] = useState(INACTIVITY_LIMIT_SEC);
+  const intervalRef = useRef<number | null>(null);
+  const resetInactivity = () => setRemainSec(INACTIVITY_LIMIT_SEC);
+  const sendCloseAndShutdown = () => {
+    try { wsRef.current?.send(JSON.stringify({ type: "CLOSE" })); } catch {}
+    try { wsRef.current?.close(); } catch {}
+  };
+  // Manual reconnect trigger
+  const [wsConnectKey, setWsConnectKey] = useState(0);
   const filteredInstances = useMemo(() => instances, [instances]);
   const [totalPages, setTotalPages] = useState(1);
   const pagedInstances = filteredInstances;
@@ -287,7 +316,7 @@ export default function ConsolePage() {
 
   // Fetch instance list (list mode only)
   useEffect(() => {
-    if (!isServerInstanceService || isCreateMode) return;
+    if (!isServerInstanceService || isCreateMode || isConsoleMode) return;
     let mounted = true;
     setInstancesLoading(true);
     setInstancesLoadError(null);
@@ -332,7 +361,279 @@ export default function ConsolePage() {
     return () => {
       mounted = false;
     };
-  }, [isServerInstanceService, isCreateMode, searchKeyword, currentPage, pageSize, reloadKey]);
+  }, [isServerInstanceService, isCreateMode, isConsoleMode, searchKeyword, currentPage, pageSize, reloadKey]);
+
+  // WebSocket connect for console mode
+  useEffect(() => {
+    if (!isConsoleMode || !selectedInstance) {
+      // Cleanup when leaving console mode
+      if (wsRef.current) {
+        try { wsRef.current.close(); } catch {}
+        wsRef.current = null;
+      }
+      setWsConnected(false);
+      setWsReady(false);
+      setWsError(null);
+      setWsClosed(false);
+      setConsoleLogs([]);
+      setRemainSec(INACTIVITY_LIMIT_SEC);
+      if (intervalRef.current) {
+        window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
+
+    let triedRefresh = false;
+    let resizeArmed = false;
+    let resizeEnabled = false;
+    let resizeTimeoutId: number | null = null;
+    const sendResize = (force = false) => {
+      const ws = wsRef.current;
+      const term = termRef.current;
+      if (!ws || !term) return;
+      if (ws.readyState === WebSocket.OPEN && (force || (wsReady && resizeEnabled))) {
+        try {
+          ws.send(JSON.stringify({ type: "RESIZE", cols: term.cols, rows: term.rows }));
+        } catch {}
+      }
+    };
+    // Initialize xterm if needed
+    if (!termRef.current && termContainerRef.current) {
+      const term = new Terminal({ convertEol: true, scrollback: 2000, fontSize: 12, theme: { background: "#000000" } });
+      const fit = new FitAddon();
+      term.loadAddon(fit);
+      term.open(termContainerRef.current);
+      try { fit.fit(); } catch {}
+      term.onData((data) => {
+        resetInactivity();
+        const ws = wsRef.current;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try {
+            const enc = (window as any).TextEncoder ? new TextEncoder() : null;
+            if (enc) {
+              ws.send(enc.encode(data));
+            } else {
+              ws.send(data);
+            }
+          } catch {
+            try { ws.send(data); } catch {}
+          }
+        }
+      });
+      termRef.current = term;
+      fitAddonRef.current = fit;
+      // Observe container resize (sidebar toggle, split view, etc.)
+      if (!resizeObsRef.current) {
+        resizeObsRef.current = new ResizeObserver(() => {
+          try { fitAddonRef.current?.fit(); } catch {}
+          // Only send after READY
+          sendResize();
+        });
+      }
+      try { resizeObsRef.current.observe(termContainerRef.current); } catch {}
+    }
+    if (!decoderRef.current) {
+      decoderRef.current = new TextDecoder();
+    }
+    const connect = async () => {
+      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+      const token = getAccessToken();
+      const qp = new URLSearchParams({ instanceId: selectedInstance.instanceId });
+      if (token) qp.set("accessToken", token);
+      const url = `${protocol}://${window.location.host}/api/computes/ws/instances/terminal?${qp.toString()}`;
+
+      try {
+        const ws = new WebSocket(url);
+        ws.binaryType = "arraybuffer";
+        wsRef.current = ws;
+        setWsConnected(false);
+        setWsReady(false);
+        setWsError(null);
+        setWsClosed(false);
+        setConsoleLogs([]);
+        termRef.current?.clear();
+        setRemainSec(INACTIVITY_LIMIT_SEC);
+
+        ws.onopen = () => {
+          setWsConnected(true);
+          // Fit on open; defer RESIZE until READY
+          try { fitAddonRef.current?.fit(); } catch {}
+        };
+        ws.onmessage = (event) => {
+          if (typeof event.data === "string") {
+            // Try to parse structured messages
+            try {
+              const obj = JSON.parse(event.data);
+              if (obj && typeof obj === "object" && typeof obj.type === "string") {
+                if (typeof obj.message === "string" && obj.message.length > 0) {
+                  termRef.current?.writeln(obj.message as string);
+                  setConsoleLogs((prev) => [...prev, obj.message as string]);
+                }
+                if (obj.type === "ERROR") {
+                  setWsError(obj.message || "에러 발생");
+                  if (obj.message) {
+                    termRef.current?.writeln(obj.message);
+                  }
+                  try {
+                    ws.send(JSON.stringify({ type: "CLOSE" }));
+                  } catch {}
+                  try { ws.close(); } catch {}
+                }
+                if (obj.type === "READY") {
+                  setWsReady(true);
+                  // Arm resize: send on first incoming payload of any kind,
+                  // or fallback after a short delay if no payload arrives.
+                  resizeArmed = true;
+                  try { fitAddonRef.current?.fit(); } catch {}
+                  if (resizeTimeoutId) {
+                    window.clearTimeout(resizeTimeoutId);
+                    resizeTimeoutId = null;
+                  }
+                  resizeTimeoutId = window.setTimeout(() => {
+                    if (resizeArmed) {
+                      try { fitAddonRef.current?.fit(); } catch {}
+                      sendResize(true);
+                      resizeArmed = false;
+                      resizeEnabled = true;
+                    }
+                  }, 150);
+                }
+                if (obj.type === "CLOSE") {
+                  setWsClosed(true);
+                }
+                // Any structured message counts as activity
+                resetInactivity();
+                return;
+              }
+            } catch {}
+            // Before handling text, if resize is armed (READY already received),
+            // send initial RESIZE now (first inbound text payload)
+            if (resizeArmed) {
+              try { fitAddonRef.current?.fit(); } catch {}
+              sendResize(true);
+              resizeArmed = false;
+              resizeEnabled = true;
+              if (resizeTimeoutId) { window.clearTimeout(resizeTimeoutId); resizeTimeoutId = null; }
+            }
+            // Fallback: plain text line
+            termRef.current?.writeln(event.data as string);
+            setConsoleLogs((prev) => [...prev, event.data as string]);
+            resetInactivity();
+            return;
+          }
+          // Binary payload (ArrayBuffer)
+          if (resizeArmed) {
+            // On first binary after READY, send initial RESIZE once
+            try { fitAddonRef.current?.fit(); } catch {}
+            sendResize(true);
+            resizeArmed = false;
+            resizeEnabled = true; // Enable future resize syncs
+            if (resizeTimeoutId) { window.clearTimeout(resizeTimeoutId); resizeTimeoutId = null; }
+          }
+          try {
+            const ab = event.data as ArrayBuffer;
+            const text = decoderRef.current?.decode(new Uint8Array(ab)) ?? "";
+            if (text) {
+              // Use write (no auto newline) for streaming feel
+              termRef.current?.write(text);
+              setConsoleLogs((prev) => [...prev, text]);
+            }
+          } catch {
+            // If decoding fails, show placeholder once
+            termRef.current?.writeln("[unsupported binary]");
+          }
+          resetInactivity();
+        };
+        ws.onerror = () => {
+          // Generic error; details will likely appear in onclose
+        };
+        ws.onclose = async (ev) => {
+          setWsConnected(false);
+          setWsReady(false);
+          setWsClosed(true);
+          if (intervalRef.current) {
+            window.clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
+          // If unauthorized (server should use a close code e.g., 4001/4401/1008), try refresh once
+          if (!triedRefresh && (ev.code === 4001 || ev.code === 4401 || ev.code === 1008)) {
+            triedRefresh = true;
+            try {
+              const refreshed = await refreshTokenApi();
+              setAccessToken(refreshed.accessToken);
+              // reconnect with new token
+              connect();
+              return;
+            } catch {
+              setWsError("인증 만료됨. 다시 로그인해 주세요.");
+              return;
+            }
+          }
+          if (ev.reason) setWsError(ev.reason);
+        };
+      } catch (e) {
+        setWsError("웹소켓을 초기화할 수 없습니다.");
+      }
+    };
+
+    void connect();
+
+    // Start inactivity countdown when in console mode and connected
+    if (intervalRef.current) {
+      window.clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    resetInactivity();
+    intervalRef.current = window.setInterval(() => {
+      setRemainSec((prev) => {
+        if (prev <= 1) {
+          // timeout
+          sendCloseAndShutdown();
+          if (intervalRef.current) {
+            window.clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // Attach resize listener to refit terminal
+    const onResize = () => {
+      try { fitAddonRef.current?.fit(); } catch {}
+      try { sendResize(); } catch {}
+    };
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      if (wsRef.current) {
+        try { wsRef.current.close(); } catch {}
+        wsRef.current = null;
+      }
+      if (intervalRef.current) {
+        window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      window.removeEventListener("resize", onResize);
+      if (resizeTimeoutId) {
+        window.clearTimeout(resizeTimeoutId);
+        resizeTimeoutId = null;
+      }
+      if (termRef.current) {
+        try { termRef.current.dispose(); } catch {}
+        termRef.current = null;
+      }
+      if (fitAddonRef.current) {
+        try { (fitAddonRef.current as any).dispose?.(); } catch {}
+        fitAddonRef.current = null;
+      }
+      if (resizeObsRef.current && termContainerRef.current) {
+        try { resizeObsRef.current.unobserve(termContainerRef.current); } catch {}
+      }
+    };
+  }, [isConsoleMode, selectedInstance?.instanceId, wsConnectKey]);
 
   useEffect(() => {
     if (!isCreateMode) return;
@@ -645,10 +946,8 @@ export default function ConsolePage() {
         <section className="min-w-0 bg-[#f3f4f7] p-4 md:p-6">
           <div
             className={`w-full rounded-none border border-slate-200/90 bg-white shadow-[0_26px_48px_-34px_rgba(15,23,42,0.48)] ${
-              isCreateMode ? "max-w-[1080px]" : ""
-            } ${
-              isCreateMode ? "overflow-visible" : "overflow-hidden"
-            }`}
+              isCreateMode || isConsoleMode ? "max-w-[1080px]" : ""
+            } ${isCreateMode ? "overflow-visible" : "overflow-hidden"}`}
           >
             <div className="border-b border-slate-100 bg-white px-5 py-4">
               <h1 className="font-[var(--font-sora)] text-[15px] font-semibold tracking-[0.01em] text-slate-900">
@@ -666,19 +965,35 @@ export default function ConsolePage() {
                     <span className="px-2 text-slate-300">/</span>
                     <span>인스턴스 생성</span>
                   </>
+                ) : isConsoleMode ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => moveToInstanceView("list")}
+                      className="text-slate-500 transition hover:text-[#123b84]"
+                    >
+                      {activeService?.name ?? "서비스"}
+                    </button>
+                    <span className="px-2 text-slate-300">/</span>
+                    <span>콘솔 연결</span>
+                  </>
                 ) : (
                   <span>{activeService?.name ?? "서비스"}</span>
                 )}
               </h1>
             </div>
 
-            <div className={`relative ${isCreateMode ? "overflow-visible" : "overflow-hidden"}`}>
+            <div className={`relative ${isCreateMode || isConsoleMode ? "overflow-visible" : "overflow-hidden"}`}>
             <div
-              className={`flex w-[200%] transition-transform duration-300 ease-out ${
-                isCreateMode ? "-translate-x-1/2" : "translate-x-0"
+              className={`flex transition-transform duration-300 ease-out ${
+                isConsoleMode ? "w-full translate-x-0" : isCreateMode ? "w-[200%] -translate-x-1/2" : "w-[200%] translate-x-0"
               }`}
             >
-            <div className={`w-1/2 ${isCreateMode ? "pointer-events-none invisible" : ""}`}>
+            <div
+              className={`${isConsoleMode ? "hidden" : "w-1/2"} ${
+                isCreateMode && !isConsoleMode ? "pointer-events-none invisible" : ""
+              }`}
+            >
             <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-5 pb-2 pt-6">
               <div className="relative w-[360px]">
                 <svg viewBox="0 0 20 20" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2">
@@ -711,6 +1026,14 @@ export default function ConsolePage() {
                   <button
                     type="button"
                     disabled={!canConsoleConnect}
+                    onClick={() => {
+                      // Switch to console view
+                      const params = new URLSearchParams(searchParams.toString());
+                      params.set("category", "compute");
+                      params.set("service", "server");
+                      params.set("mode", "console");
+                      router.push(`/console?${params.toString()}`);
+                    }}
                     className="inline-flex h-9 items-center justify-center rounded-none border border-slate-300/90 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300"
                   >
                     콘솔 연결
@@ -930,7 +1253,80 @@ export default function ConsolePage() {
               </div>
             </div>
             </div>
-            <div className="w-1/2 bg-white p-5 pb-6 pt-6">
+            <div className={`${isConsoleMode ? "w-full" : "w-1/2"} bg-white p-5 pb-6 pt-6`}>
+              {isConsoleMode ? (
+                <div
+                  className="flex min-h-[640px] h-[calc(100vh-220px)] flex-col"
+                  onMouseMove={resetInactivity}
+                  onKeyDown={resetInactivity}
+                  tabIndex={0}
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="text-[12px] text-slate-600">
+                      {selectedInstance ? (
+                        <>
+                          <span className="font-semibold text-slate-800">{selectedInstance.name}</span>
+                          <span className="px-1 text-slate-400">·</span>
+                          <span className="text-slate-500">{selectedInstance.instanceId}</span>
+                        </>
+                      ) : (
+                        <span className="text-slate-500">인스턴스가 선택되지 않았습니다</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {wsReady ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            sendCloseAndShutdown();
+                          }}
+                          className="inline-flex h-8 items-center justify-center rounded-none border border-rose-300 bg-white px-3 text-[12px] font-semibold text-rose-700 transition hover:border-rose-400 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          연결 종료
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setWsConnectKey((k) => k + 1)}
+                          disabled={wsConnected}
+                          className="inline-flex h-8 items-center justify-center rounded-none border border-emerald-300 bg-white px-3 text-[12px] font-semibold text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          콘솔 연결
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          moveToInstanceView("list");
+                          setReloadKey((k) => k + 1);
+                        }}
+                        className="inline-flex h-8 items-center justify-center rounded-none border border-slate-300 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                      >
+                        목록으로
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mb-2 flex items-center justify-between text-[12px] text-slate-600">
+                    <div>
+                      상태: {wsError ? (
+                        <span className="font-semibold text-rose-700">에러 발생</span>
+                      ) : wsClosed ? (
+                        <span className="text-slate-700">연결 종료</span>
+                      ) : wsReady ? (
+                        <span className="text-emerald-700">연결됨</span>
+                      ) : (
+                        <span className="text-slate-600">연결 시도 중...</span>
+                      )}
+                    </div>
+                    <div className="font-mono text-[11px] text-slate-500">
+                      {String(Math.floor(remainSec / 60)).padStart(2, '0')}:{String(remainSec % 60).padStart(2, '0')}
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-hidden rounded-none border border-slate-200 bg-black">
+                    <div ref={termContainerRef} className="h-full w-full" />
+                  </div>
+                </div>
+              ) : (
               <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,680px)_340px]">
               {metaLoading ? (
                 <div className="flex h-[320px] items-center justify-center rounded-none border border-dashed border-slate-300 text-[13px] text-slate-500">
@@ -1209,6 +1605,7 @@ export default function ConsolePage() {
                 </>
               )}
               </div>
+              )}
             </div>
             </div>
             </div>
