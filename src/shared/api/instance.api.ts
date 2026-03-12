@@ -43,3 +43,30 @@ export async function getInstanceListApi(params: { searchKeyword: string; page: 
   );
   return response.data.body;
 }
+
+export async function stopInstanceApi(instanceId: string, idempotencyKey: string) {
+  const response = await apiClient.post<ApiEnvelope<unknown>>(
+    "/computes/v1/instance/stop",
+    { instanceId },
+    { headers: { "X-Idempotency-Key": idempotencyKey } }
+  );
+  return response.data.body;
+}
+
+export async function restartInstanceApi(instanceId: string, idempotencyKey: string) {
+  const response = await apiClient.post<ApiEnvelope<unknown>>(
+    "/computes/v1/instance/restart",
+    { instanceId },
+    { headers: { "X-Idempotency-Key": idempotencyKey } }
+  );
+  return response.data.body;
+}
+
+export async function terminateInstanceApi(instanceId: string, idempotencyKey: string) {
+  const response = await apiClient.post<ApiEnvelope<unknown>>(
+    "/computes/v1/instance/terminate",
+    { instanceId },
+    { headers: { "X-Idempotency-Key": idempotencyKey } }
+  );
+  return response.data.body;
+}

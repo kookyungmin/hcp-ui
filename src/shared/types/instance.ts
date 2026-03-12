@@ -40,6 +40,7 @@ export type GenerateInstanceRequest = {
 // Instance list types
 export type InstanceStatus =
   | "PROVISIONING"
+  | "RESTARTING"
   | "RUNNING"
   | "STOPPING"
   | "STOPPED"

@@ -13,7 +13,7 @@ import { useAuthStore } from "@/shared/stores/auth.store";
 import { hasServicePermission } from "@/shared/lib/permission";
 import { getAccessToken, setAccessToken } from "@/shared/lib/access-token";
 import { refreshTokenApi } from "@/shared/api/auth.api";
-import { getInstanceListApi, getInstanceMetaAllApi, provisionInstanceApi } from "@/shared/api/instance.api";
+import { getInstanceListApi, getInstanceMetaAllApi, provisionInstanceApi, restartInstanceApi, stopInstanceApi, terminateInstanceApi } from "@/shared/api/instance.api";
 import type { GenerateInstanceRequest, InstanceMeta, InstanceStatus } from "@/shared/types/instance";
 
 function CategoryIcon({ id }: { id: string }) {
@@ -137,6 +137,10 @@ export default function ConsolePage() {
   const [instancesLoading, setInstancesLoading] = useState(false);
   const [instancesLoadError, setInstancesLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Idempotency keys per instance and action (stable until list reload)
+  const [stopKeys, setStopKeys] = useState<Record<string, string>>({});
+  const [restartKeys, setRestartKeys] = useState<Record<string, string>>({});
+  const [terminateKeys, setTerminateKeys] = useState<Record<string, string>>({});
   const firstReadableTarget = useMemo(() => {
     for (const category of SERVICE_CATEGORIES) {
       for (const service of category.services) {
@@ -233,6 +237,13 @@ export default function ConsolePage() {
       window.removeEventListener("resize", updateSidebarCollapsed);
     };
   }, []);
+
+  // Reset idempotency key maps when list reloads
+  useEffect(() => {
+    setStopKeys({});
+    setRestartKeys({});
+    setTerminateKeys({});
+  }, [reloadKey]);
 
   useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
@@ -1059,16 +1070,48 @@ export default function ConsolePage() {
 
                     {operationDropdownOpen && hasSelectedInstance ? (
                       <div className="absolute right-0 top-10 z-20 min-w-[190px] overflow-hidden rounded-none border border-slate-200 bg-white py-1 shadow-[0_18px_32px_-20px_rgba(15,23,42,0.45)]">
-                        {["인스턴스 중지", "인스턴스 재부팅", "인스턴스 삭제"].map((label) => (
+                        {[
+                          { key: "stop", label: "인스턴스 중지", enabled: selectedInstance?.status === "RUNNING" },
+                          { key: "restart", label: "인스턴스 재부팅", enabled: selectedInstance?.status === "STOPPED" },
+                          { key: "terminate", label: "인스턴스 삭제", enabled: selectedInstance?.status === "STOPPED" }
+                        ].map((item) => (
                           <button
-                            key={label}
+                            key={item.key}
                             type="button"
+                            disabled={!item.enabled}
                             onClick={() => {
+                              if (!item.enabled) return;
                               setOperationDropdownOpen(false);
+                              (async () => {
+                                if (!selectedInstance) return;
+                                try {
+                                  const id = selectedInstance.instanceId;
+                                  if (item.key === "stop") {
+                                    const key = stopKeys[id] ?? createIdempotencyKey();
+                                    if (!stopKeys[id]) setStopKeys((prev) => ({ ...prev, [id]: key }));
+                                    await stopInstanceApi(id, key);
+                                  } else if (item.key === "restart") {
+                                    const key = restartKeys[id] ?? createIdempotencyKey();
+                                    if (!restartKeys[id]) setRestartKeys((prev) => ({ ...prev, [id]: key }));
+                                    await restartInstanceApi(id, key);
+                                  } else if (item.key === "terminate") {
+                                    const key = terminateKeys[id] ?? createIdempotencyKey();
+                                    if (!terminateKeys[id]) setTerminateKeys((prev) => ({ ...prev, [id]: key }));
+                                    await terminateInstanceApi(id, key);
+                                  }
+                                  setReloadKey((k) => k + 1);
+                                } catch {
+                                  // Error toast handled globally in apiClient
+                                }
+                              })();
                             }}
-                            className="flex h-9 w-full items-center px-3 text-left text-[12px] text-slate-700 transition hover:bg-slate-50"
+                            className={`flex h-9 w-full items-center px-3 text-left text-[12px] transition ${
+                              item.enabled
+                                ? "text-slate-700 hover:bg-slate-50"
+                                : "cursor-not-allowed text-slate-300"
+                            }`}
                           >
-                            {label}
+                            {item.label}
                           </button>
                         ))}
                       </div>
@@ -1134,6 +1177,7 @@ export default function ConsolePage() {
                         const s = instance.status;
                         const labelMap: Record<string, string> = {
                           PROVISIONING: "프로비저닝 중",
+                          RESTARTING: "부팅 중",
                           RUNNING: "실행 중",
                           STOPPING: "중지 중",
                           STOPPED: "중지",
