@@ -13,7 +13,9 @@ import { useAuthStore } from "@/shared/stores/auth.store";
 import { hasServicePermission } from "@/shared/lib/permission";
 import { getAccessToken, setAccessToken } from "@/shared/lib/access-token";
 import { refreshTokenApi } from "@/shared/api/auth.api";
-import { getInstanceListApi, getInstanceMetaAllApi, provisionInstanceApi, restartInstanceApi, stopInstanceApi, terminateInstanceApi } from "@/shared/api/instance.api";
+import { getInstanceListApi, getInstanceMetaAllApi, provisionInstanceApi, restartInstanceApi, stopInstanceApi, terminateInstanceApi, getInstanceInfoApi } from "@/shared/api/instance.api";
+import { useToastStore } from "@/shared/stores/toast.store";
+import type { InstanceInfo } from "@/shared/types/instance";
 import type { GenerateInstanceRequest, InstanceMeta, InstanceStatus } from "@/shared/types/instance";
 
 function CategoryIcon({ id }: { id: string }) {
@@ -123,7 +125,7 @@ export default function ConsolePage() {
   const [selectedImageCode, setSelectedImageCode] = useState("");
   const [selectedSpecCode, setSelectedSpecCode] = useState("");
   const [selectedVpcCode, setSelectedVpcCode] = useState("");
-  const storageType: "HDD" = "HDD";
+  const [storageType, setStorageType] = useState<"HDD" | "SSD">("HDD");
   const [storageSize, setStorageSize] = useState(50);
   const [createFormErrors, setCreateFormErrors] = useState<{ instanceName?: string; storageSize?: string }>({});
   const [createRequesting, setCreateRequesting] = useState(false);
@@ -158,6 +160,8 @@ export default function ConsolePage() {
   const canWriteService = hasServicePermission(loginUser?.roles, activeCategoryId, activeServiceId, "write");
   const isServerInstanceService = activeCategoryId === "compute" && activeServiceId === "server";
   const isCreateMode = searchParams.get("mode") === "create" && isServerInstanceService;
+  const isOperateMode = searchParams.get("mode") === "operate" && isServerInstanceService;
+  const isViewOnly = isOperateMode;
   const isConsoleMode = searchParams.get("mode") === "console" && isServerInstanceService;
 
   useEffect(() => {
@@ -647,7 +651,7 @@ export default function ConsolePage() {
   }, [isConsoleMode, selectedInstance?.instanceId, wsConnectKey]);
 
   useEffect(() => {
-    if (!isCreateMode) return;
+    if (!isCreateMode && !isOperateMode) return;
 
     let mounted = true;
 
@@ -675,10 +679,95 @@ export default function ConsolePage() {
     return () => {
       mounted = false;
     };
-  }, [isCreateMode]);
+  }, [isCreateMode, isOperateMode]);
+
+  // Fetch selected instance info in operate mode
+  const [operateInstance, setOperateInstance] = useState<InstanceInfo | null>(null);
+  const [operateLoading, setOperateLoading] = useState(false);
+  const [operateError, setOperateError] = useState<string | null>(null);
+  const showToast = useToastStore((s) => s.showToast);
+  const [operateTab, setOperateTab] = useState<"info" | "ssh" | "security">("info");
+  type SecurityRule = { protocol: "TCP"; port: string; cidr: string; name: string };
+  const [inboundRules, setInboundRules] = useState<SecurityRule[]>([]);
+  const [outboundRules, setOutboundRules] = useState<SecurityRule[]>([]);
 
   useEffect(() => {
-    if (!isCreateMode) {
+    if (!isOperateMode || !activeRowId) return;
+    let mounted = true;
+    setOperateLoading(true);
+    setOperateError(null);
+    (async () => {
+      try {
+        const info = await getInstanceInfoApi(activeRowId);
+        if (!mounted) return;
+        setOperateInstance(info);
+      } catch {
+        if (!mounted) return;
+        setOperateError("인스턴스 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      } finally {
+        if (mounted) setOperateLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [isOperateMode, activeRowId]);
+
+  // Populate form states from operate instance in view-only mode
+  useEffect(() => {
+    if (!isOperateMode || !operateInstance) return;
+    setInstanceName(operateInstance.name || "");
+    setTags(Array.isArray(operateInstance.tags) ? operateInstance.tags : []);
+    setSelectedImageCode(operateInstance.imageCode || "");
+    setSelectedSpecCode(operateInstance.specCode || "");
+    setSelectedVpcCode(operateInstance.vpcCode || "");
+    if (typeof operateInstance.storageSize === "number") {
+      setStorageSize(operateInstance.storageSize);
+    }
+    if (operateInstance.storageType === "HDD" || operateInstance.storageType === "SSD") {
+      setStorageType(operateInstance.storageType);
+    }
+  }, [isOperateMode, operateInstance]);
+
+  const canEditTags = isOperateMode || isCreateMode;
+  const canEditSpec = isOperateMode || isCreateMode;
+  const canEditStorageSize = isOperateMode || isCreateMode;
+
+  const handleSaveBasic = async () => {
+    if (!activeRowId) return;
+    // TODO: Connect basic update API (tags) when available
+    showToast("success", "기본 설정 저장 API 연결 필요 (태그)");
+  };
+
+  const handleSaveSpecStorage = async () => {
+    if (!activeRowId) return;
+    // TODO: Connect spec/storage update API when available
+    showToast("success", "사양/스토리지 저장 API 연결 필요");
+  };
+
+  const handleSaveSsh = async () => {
+    if (!activeRowId) return;
+    // TODO: Connect SSH public key register API
+    showToast("success", "SSH Public Key 저장 API 연결 필요");
+  };
+
+  const handleSaveSecurity = async () => {
+    if (!activeRowId) return;
+    // TODO: Connect security policy update API
+    showToast("success", "보안 그룹 저장 API 연결 필요");
+  };
+
+  const addInboundRule = () => setInboundRules((prev) => [...prev, { protocol: "TCP", port: "", cidr: "", name: "" }]);
+  const addOutboundRule = () => setOutboundRules((prev) => [...prev, { protocol: "TCP", port: "", cidr: "", name: "" }]);
+  const removeInboundRule = (idx: number) => setInboundRules((prev) => prev.filter((_, i) => i !== idx));
+  const removeOutboundRule = (idx: number) => setOutboundRules((prev) => prev.filter((_, i) => i !== idx));
+  const updateInboundRule = (idx: number, patch: Partial<SecurityRule>) =>
+    setInboundRules((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  const updateOutboundRule = (idx: number, patch: Partial<SecurityRule>) =>
+    setOutboundRules((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+
+  useEffect(() => {
+    if (!isCreateMode && !isOperateMode) {
       setCreateRequesting(false);
       setCreateRequestError(null);
       setIdempotencyKey("");
@@ -691,12 +780,13 @@ export default function ConsolePage() {
       setSelectedImageCode(instanceMeta?.osImageList[0]?.imageCode || "");
       setSelectedSpecCode(instanceMeta?.specList[0]?.specCode || "");
       setSelectedVpcCode(instanceMeta?.vpcList[0]?.vpcCode || "");
+      setStorageType("HDD");
       return;
     }
 
     setCreateRequestError(null);
     setIdempotencyKey(createIdempotencyKey());
-  }, [isCreateMode, instanceMeta]);
+  }, [isCreateMode, isOperateMode, instanceMeta]);
 
   const toggleCategory = (categoryId: string) => {
     setCollapsedCategories((prev) => ({
@@ -957,8 +1047,8 @@ export default function ConsolePage() {
         <section className="min-w-0 bg-[#f3f4f7] p-4 md:p-6">
           <div
             className={`w-full rounded-none border border-slate-200/90 bg-white shadow-[0_26px_48px_-34px_rgba(15,23,42,0.48)] ${
-              isCreateMode || isConsoleMode ? "max-w-[1080px]" : ""
-            } ${isCreateMode ? "overflow-visible" : "overflow-hidden"}`}
+              (isCreateMode || isConsoleMode || isOperateMode) ? "max-w-[1080px]" : ""
+            } ${(isCreateMode || isOperateMode) ? "overflow-visible" : "overflow-hidden"}`}
           >
             <div className="border-b border-slate-100 bg-white px-5 py-4">
               <h1 className="font-[var(--font-sora)] text-[15px] font-semibold tracking-[0.01em] text-slate-900">
@@ -988,21 +1078,33 @@ export default function ConsolePage() {
                     <span className="px-2 text-slate-300">/</span>
                     <span>콘솔 연결</span>
                   </>
+                ) : isOperateMode ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => moveToInstanceView("list")}
+                      className="text-slate-500 transition hover:text-[#123b84]"
+                    >
+                      {activeService?.name ?? "서비스"}
+                    </button>
+                    <span className="px-2 text-slate-300">/</span>
+                    <span>인스턴스 작업</span>
+                  </>
                 ) : (
                   <span>{activeService?.name ?? "서비스"}</span>
                 )}
               </h1>
             </div>
 
-            <div className={`relative ${isCreateMode || isConsoleMode ? "overflow-visible" : "overflow-hidden"}`}>
+            <div className={`relative ${isCreateMode || isConsoleMode || isOperateMode ? "overflow-visible" : "overflow-hidden"}`}>
             <div
               className={`flex transition-transform duration-300 ease-out ${
-                isConsoleMode ? "w-full translate-x-0" : isCreateMode ? "w-[200%] -translate-x-1/2" : "w-[200%] translate-x-0"
+                isConsoleMode ? "w-full translate-x-0" : (isCreateMode || isOperateMode) ? "w-[200%] -translate-x-1/2" : "w-[200%] translate-x-0"
               }`}
             >
             <div
               className={`${isConsoleMode ? "hidden" : "w-1/2"} ${
-                isCreateMode && !isConsoleMode ? "pointer-events-none invisible" : ""
+                (isCreateMode || isOperateMode) && !isConsoleMode ? "pointer-events-none invisible" : ""
               }`}
             >
             <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-5 pb-2 pt-6">
@@ -1122,7 +1224,14 @@ export default function ConsolePage() {
                 {canWriteService ? (
                   <button
                     type="button"
-                    disabled={!hasSelectedInstance}
+                    disabled={!hasSelectedInstance || selectedInstance?.status !== "RUNNING"}
+                    onClick={() => {
+                      const params = new URLSearchParams(searchParams.toString());
+                      params.set("category", "compute");
+                      params.set("service", "server");
+                      params.set("mode", "operate");
+                      router.push(`/console?${params.toString()}`);
+                    }}
                     className="inline-flex h-9 items-center justify-center rounded-none border border-slate-300/90 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-300"
                   >
                     인스턴스 작업
@@ -1371,7 +1480,7 @@ export default function ConsolePage() {
                   </div>
                 </div>
               ) : (
-              <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,680px)_340px]">
+                <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,680px)_340px]">
               {metaLoading ? (
                 <div className="flex h-[320px] items-center justify-center rounded-none border border-dashed border-slate-300 text-[13px] text-slate-500">
                   인스턴스 생성 메타 정보를 불러오는 중입니다...
@@ -1381,6 +1490,35 @@ export default function ConsolePage() {
               ) : (
                 <>
                   <div className="max-w-[680px] pr-2">
+                    {isOperateMode ? (
+                      <div className="mb-3">
+                        <div className="flex items-end gap-1 border-b border-slate-200">
+                          {[
+                            { key: "info", label: "인스턴스 정보" },
+                          { key: "ssh", label: "SSH Public Key" },
+                          { key: "security", label: "보안 그룹" }
+                          ].map((tab) => {
+                            const active = operateTab === (tab.key as any);
+                            return (
+                              <button
+                                key={tab.key}
+                                type="button"
+                                onClick={() => setOperateTab(tab.key as any)}
+                                className={`inline-flex h-9 items-center justify-center rounded-t-md px-3 text-[12px] font-medium ${
+                                  active
+                                    ? "-mb-px border-x border-t border-slate-300 bg-white text-slate-900"
+                                    : "border-transparent bg-transparent text-slate-600 hover:text-slate-800"
+                                }`}
+                              >
+                                {tab.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {(!isOperateMode || operateTab === "info") ? (
                     <form
                       id="instance-create-form"
                       className="space-y-5"
@@ -1403,7 +1541,10 @@ export default function ConsolePage() {
                                 }
                               }}
                               required
-                              className="h-10 w-full rounded-none border border-slate-300 bg-white px-3 text-[12px] text-slate-700 focus:border-[#18499f] focus:outline-none focus:ring-2 focus:ring-[#18499f]/15"
+                              disabled={isViewOnly}
+                              className={`h-10 w-full rounded-none border px-3 text-[12px] text-slate-700 focus:border-[#18499f] focus:outline-none focus:ring-2 focus:ring-[#18499f]/15 ${
+                                isViewOnly ? "cursor-not-allowed border-slate-300 bg-slate-50" : "border-slate-300 bg-white"
+                              }`}
                               placeholder="예: web-prod-2"
                             />
                             {createFormErrors.instanceName ? (
@@ -1433,7 +1574,8 @@ export default function ConsolePage() {
                                     </button>
                                   </span>
                                 ))}
-                                <input
+                                {canEditTags ? (
+                                  <input
                                   value={tagInput}
                                   onChange={(event) => setTagInput(event.target.value)}
                                   onKeyDown={(event) => {
@@ -1449,10 +1591,22 @@ export default function ConsolePage() {
                                   }}
                                   className="h-10 min-w-[140px] flex-1 bg-transparent px-1 text-[12px] text-slate-700 placeholder:text-slate-400 focus:outline-none"
                                   placeholder={tags.length === 0 ? "태그 입력 후 Enter" : ""}
-                                />
+                                  />
+                                ) : null}
                               </div>
                             </div>
                           </div>
+                          {isOperateMode ? (
+                            <div className="mt-2 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={handleSaveBasic}
+                                className="inline-flex h-9 items-center justify-center rounded-none border border-slate-300 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                              >
+                                저장
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
                       </fieldset>
 
@@ -1462,7 +1616,11 @@ export default function ConsolePage() {
                           <div className="space-y-1.5">
                             <span className="text-[12px] font-semibold text-slate-700">OS 이미지</span>
                             <div className="flex flex-wrap gap-2">
-                              {instanceMeta?.osImageList.map((image) => {
+                              {(
+                                (isViewOnly
+                                  ? instanceMeta?.osImageList.filter((img) => img.imageCode === selectedImageCode)
+                                  : instanceMeta?.osImageList) || []
+                              ).map((image) => {
                                 const selected = selectedImageCode === image.imageCode;
                                 const logoSrc = resolveOsLogo(image.imageCode, image.osName);
                                 return (
@@ -1479,7 +1637,10 @@ export default function ConsolePage() {
                                       name="os-image"
                                       checked={selected}
                                       onChange={() => setSelectedImageCode(image.imageCode)}
-                                      className="absolute right-2 top-2 h-4 w-4 accent-[#123b84]"
+                                      disabled={isViewOnly}
+                                      className={`absolute right-2 top-2 h-4 w-4 accent-[#123b84] ${
+                                        isViewOnly ? "cursor-not-allowed" : ""
+                                      }`}
                                     />
                                     <div className="mb-1.5 flex h-10 items-center justify-center border-b border-slate-200 pb-1.5">
                                       {logoSrc ? (
@@ -1505,7 +1666,12 @@ export default function ConsolePage() {
                             <select
                               value={selectedSpecCode}
                               onChange={(event) => setSelectedSpecCode(event.target.value)}
-                              className="h-10 w-full rounded-none border border-slate-300 bg-white px-3 text-[12px] text-slate-700 focus:border-[#18499f] focus:outline-none focus:ring-2 focus:ring-[#18499f]/15"
+                              disabled={!canEditSpec}
+                              className={`h-10 w-full rounded-none border px-3 text-[12px] text-slate-700 ${
+                                !canEditSpec
+                                  ? "cursor-not-allowed border-slate-300 bg-slate-50"
+                                  : "border-slate-300 bg-white focus:border-[#18499f] focus:outline-none focus:ring-2 focus:ring-[#18499f]/15"
+                              }`}
                             >
                               {instanceMeta?.specList.map((spec) => (
                                 <option key={spec.specCode} value={spec.specCode}>
@@ -1514,45 +1680,94 @@ export default function ConsolePage() {
                               ))}
                             </select>
                           </label>
+                          {isViewOnly ? (
+                            <div className="grid gap-4 pt-1 md:grid-cols-2">
+                              <label className="space-y-1.5">
+                                <span className="text-[12px] font-semibold text-slate-700">스토리지 타입</span>
+                                <select
+                                  value={storageType}
+                                  disabled
+                                  className="h-10 w-full cursor-not-allowed rounded-none border border-slate-300 bg-slate-50 px-3 text-[12px] text-slate-700"
+                                >
+                                  <option value="HDD">HDD</option>
+                                  <option value="SSD">SSD</option>
+                                </select>
+                              </label>
+                              <label className="space-y-1.5">
+                                <span className="text-[12px] font-semibold text-slate-700">스토리지 용량 (GB)</span>
+                                <input
+                                  value={storageSize}
+                                  disabled={!canEditStorageSize}
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  className={`h-10 w-full rounded-none border px-3 text-[12px] text-slate-700 ${
+                                    !canEditStorageSize
+                                      ? "cursor-not-allowed border-slate-300 bg-slate-50"
+                                      : "border-slate-300 bg-white focus:border-[#18499f] focus:outline-none focus:ring-2 focus:ring-[#18499f]/15"
+                                  }`}
+                                />
+                              </label>
+                            </div>
+                          ) : null}
+                          {isOperateMode ? (
+                            <div className="mt-2 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={handleSaveSpecStorage}
+                                className="inline-flex h-9 items-center justify-center rounded-none border border-slate-300 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                              >
+                                저장
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
                       </fieldset>
 
-                      <fieldset className="border border-slate-400 bg-white px-3 pb-3 pt-1 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.5)]">
-                        <legend className="px-1 text-[12px] font-semibold tracking-[0.02em] text-black">스토리지</legend>
-                        <div className="grid gap-4 pt-1 md:grid-cols-2">
-                          <label className="space-y-1.5">
-                            <span className="text-[12px] font-semibold text-slate-700">스토리지 타입</span>
-                            <select
-                              value={storageType}
-                              disabled
-                              className="h-10 w-full cursor-not-allowed rounded-none border border-slate-300 bg-slate-50 px-3 text-[12px] text-slate-700"
-                            >
-                              <option value="HDD">HDD</option>
-                            </select>
-                          </label>
-                          <label className="space-y-1.5">
-                            <span className="text-[12px] font-semibold text-slate-700">스토리지 용량 (GB)</span>
-                            <input
-                              value={storageSize}
-                              onChange={(event) => {
-                                const parsed = Number(event.target.value);
-                                const nextValue = Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
-                                setStorageSize(nextValue);
-                                if (createFormErrors.storageSize) {
-                                  setCreateFormErrors((prev) => ({ ...prev, storageSize: undefined }));
-                                }
-                              }}
-                              type="number"
-                              min={0}
-                              step={1}
-                              className="h-10 w-full rounded-none border border-slate-300 bg-white px-3 text-[12px] text-slate-700 focus:border-[#18499f] focus:outline-none focus:ring-2 focus:ring-[#18499f]/15"
-                            />
-                            {createFormErrors.storageSize ? (
-                              <p className="text-[11px] text-rose-600">{createFormErrors.storageSize}</p>
-                            ) : null}
-                          </label>
-                        </div>
-                      </fieldset>
+                      {isViewOnly ? null : (
+                        <fieldset className="border border-slate-400 bg-white px-3 pb-3 pt-1 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.5)]">
+                          <legend className="px-1 text-[12px] font-semibold tracking-[0.02em] text-black">스토리지</legend>
+                          <div className="grid gap-4 pt-1 md:grid-cols-2">
+                            <label className="space-y-1.5">
+                              <span className="text-[12px] font-semibold text-slate-700">스토리지 타입</span>
+                              <select
+                                value={storageType}
+                                disabled
+                                className="h-10 w-full cursor-not-allowed rounded-none border border-slate-300 bg-slate-50 px-3 text-[12px] text-slate-700"
+                              >
+                                <option value="HDD">HDD</option>
+                                <option value="SSD">SSD</option>
+                              </select>
+                            </label>
+                            <label className="space-y-1.5">
+                              <span className="text-[12px] font-semibold text-slate-700">스토리지 용량 (GB)</span>
+                              <input
+                                value={storageSize}
+                                onChange={(event) => {
+                                  const parsed = Number(event.target.value);
+                                  const nextValue = Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
+                                  setStorageSize(nextValue);
+                                  if (createFormErrors.storageSize) {
+                                    setCreateFormErrors((prev) => ({ ...prev, storageSize: undefined }));
+                                  }
+                                }}
+                                type="number"
+                                min={0}
+                                step={1}
+                                disabled={isViewOnly}
+                                className={`h-10 w-full rounded-none border px-3 text-[12px] text-slate-700 ${
+                                  isViewOnly
+                                    ? "cursor-not-allowed border-slate-300 bg-slate-50"
+                                    : "border-slate-300 bg-white focus:border-[#18499f] focus:outline-none focus:ring-2 focus:ring-[#18499f]/15"
+                                }`}
+                              />
+                              {createFormErrors.storageSize ? (
+                                <p className="text-[11px] text-rose-600">{createFormErrors.storageSize}</p>
+                              ) : null}
+                            </label>
+                          </div>
+                        </fieldset>
+                      )}
 
                       <fieldset className="border border-slate-400 bg-white px-3 pb-3 pt-1 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.5)]">
                         <legend className="px-1 text-[12px] font-semibold tracking-[0.02em] text-black">네트워크 설정</legend>
@@ -1562,7 +1777,12 @@ export default function ConsolePage() {
                             <select
                               value={selectedVpcCode}
                               onChange={(event) => setSelectedVpcCode(event.target.value)}
-                              className="h-10 w-full rounded-none border border-slate-300 bg-white px-3 text-[12px] text-slate-700 focus:border-[#18499f] focus:outline-none focus:ring-2 focus:ring-[#18499f]/15"
+                              disabled={isViewOnly}
+                              className={`h-10 w-full rounded-none border px-3 text-[12px] text-slate-700 ${
+                                isViewOnly
+                                  ? "cursor-not-allowed border-slate-300 bg-slate-50"
+                                  : "border-slate-300 bg-white focus:border-[#18499f] focus:outline-none focus:ring-2 focus:ring-[#18499f]/15"
+                              }`}
                             >
                               {instanceMeta?.vpcList.map((vpc) => (
                                 <option key={vpc.vpcCode} value={vpc.vpcCode}>
@@ -1591,15 +1811,112 @@ export default function ConsolePage() {
                         >
                           목록으로
                         </button>
-                        <button
-                          type="submit"
-                          disabled={createRequesting}
-                          className="inline-flex h-9 items-center justify-center rounded-none border border-[#123b84] bg-[#123b84] px-3 text-[12px] font-semibold text-white shadow-[0_10px_18px_-14px_rgba(18,59,132,0.9)] transition hover:border-[#0f3170] hover:bg-[#0f3170]"
-                        >
-                          {createRequesting ? "생성 요청 중..." : "인스턴스 생성 요청"}
-                        </button>
+                        {isViewOnly ? null : (
+                          <button
+                            type="submit"
+                            disabled={createRequesting}
+                            className="inline-flex h-9 items-center justify-center rounded-none border border-[#123b84] bg-[#123b84] px-3 text-[12px] font-semibold text-white shadow-[0_10px_18px_-14px_rgba(18,59,132,0.9)] transition hover:border-[#0f3170] hover:bg-[#0f3170]"
+                          >
+                            {createRequesting ? "생성 요청 중..." : "인스턴스 생성 요청"}
+                          </button>
+                        )}
                       </div>
+                      
                     </form>
+                    ) : null}
+
+                    {isOperateMode && operateTab === "ssh" ? (
+                      <fieldset className="border border-slate-400 bg-white px-3 pb-3 pt-1 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.5)]">
+                        <legend className="px-1 text-[12px] font-semibold tracking-[0.02em] text-black">SSH Public Key</legend>
+                        <div className="space-y-3 pt-1">
+                          <label className="space-y-1.5">
+                            <span className="text-[12px] font-semibold text-slate-700">키 이름</span>
+                            <input className="h-10 w-full rounded-none border border-slate-300 bg-white px-3 text-[12px] text-slate-700" placeholder="예: my-key" />
+                          </label>
+                          <label className="space-y-1.5">
+                            <span className="text-[12px] font-semibold text-slate-700">Public Key</span>
+                            <textarea className="min-h-[120px] w-full rounded-none border border-slate-300 bg-white p-3 text-[12px] text-slate-700" placeholder="ssh-ed25519 AAAAC3... user@host" />
+                          </label>
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={handleSaveSsh}
+                              className="inline-flex h-9 items-center justify-center rounded-none border border-slate-300 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                            >
+                              저장
+                            </button>
+                          </div>
+                        </div>
+                      </fieldset>
+                    ) : null}
+
+                    {isOperateMode && operateTab === "security" ? (
+                      <>
+                        <fieldset className="border border-slate-400 bg-white px-3 pb-3 pt-1 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.5)]">
+                          <legend className="px-1 text-[12px] font-semibold tracking-[0.02em] text-black">인바운드 규칙</legend>
+                          <div className="mb-2 flex items-center justify-between">
+                            <span className="text-[12px] text-slate-600">규칙이 없으면 모든 요청에 대해 차단됩니다.</span>
+                            <button
+                              type="button"
+                              onClick={addInboundRule}
+                              className="inline-flex h-7 items-center justify-center rounded-none border border-slate-300 bg-white px-2 text-[11px] font-medium text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                            >
+                              + 규칙 추가
+                            </button>
+                          </div>
+                          <div className="space-y-2 text-[12px] text-slate-700">
+                            {inboundRules.length > 0 ? (
+                              inboundRules.map((rule, idx) => (
+                                <div key={`inbound-${idx}`} className="grid grid-cols-[60px_100px_1fr_1fr_70px] items-center gap-2">
+                                  <span className="inline-flex h-8 items-center justify-center border border-slate-300 bg-slate-50 text-[10px] font-semibold text-slate-700">TCP</span>
+                                  <input value={rule.port} onChange={(e) => updateInboundRule(idx, { port: e.target.value })} placeholder="포트" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
+                                  <input value={rule.cidr} onChange={(e) => updateInboundRule(idx, { cidr: e.target.value })} placeholder="IP/CIDR (예: 0.0.0.0/0)" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
+                                  <input value={rule.name} onChange={(e) => updateInboundRule(idx, { name: e.target.value })} placeholder="규칙 이름" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
+                                  <div className="flex justify-end">
+                                    <button type="button" onClick={() => removeInboundRule(idx)} className="inline-flex h-7 items-center justify-center rounded-none border border-slate-300 bg-white px-2 text-[11px] font-medium text-rose-700 hover:border-rose-300 hover:bg-rose-50">삭제</button>
+                                  </div>
+                                </div>
+                              ))
+                            ) : null}
+                          </div>
+                        </fieldset>
+
+                        <fieldset className="mt-3 border border-slate-400 bg-white px-3 pb-3 pt-1 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.5)]">
+                          <legend className="px-1 text-[12px] font-semibold tracking-[0.02em] text-black">아웃바운드 규칙</legend>
+                          <div className="mb-2 flex items-center justify-between">
+                            <span className="text-[12px] text-slate-600">규칙이 없으면 모든 요청을 허용합니다.</span>
+                            <button
+                              type="button"
+                              onClick={addOutboundRule}
+                              className="inline-flex h-7 items-center justify-center rounded-none border border-slate-300 bg-white px-2 text-[11px] font-medium text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                            >
+                              + 규칙 추가
+                            </button>
+                          </div>
+                          <div className="space-y-2 text-[12px] text-slate-700">
+                            {outboundRules.length > 0 ? (
+                              outboundRules.map((rule, idx) => (
+                                <div key={`outbound-${idx}`} className="grid grid-cols-[60px_100px_1fr_1fr_70px] items-center gap-2">
+                                  <span className="inline-flex h-8 items-center justify-center border border-slate-300 bg-slate-50 text-[10px] font-semibold text-slate-700">TCP</span>
+                                  <input value={rule.port} onChange={(e) => updateOutboundRule(idx, { port: e.target.value })} placeholder="포트" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
+                                  <input value={rule.cidr} onChange={(e) => updateOutboundRule(idx, { cidr: e.target.value })} placeholder="IP/CIDR (예: 0.0.0.0/0)" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
+                                  <input value={rule.name} onChange={(e) => updateOutboundRule(idx, { name: e.target.value })} placeholder="규칙 이름" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
+                                  <div className="flex justify-end">
+                                    <button type="button" onClick={() => removeOutboundRule(idx)} className="inline-flex h-7 items-center justify-center rounded-none border border-slate-300 bg-white px-2 text-[11px] font-medium text-rose-700 hover:border-rose-300 hover:bg-rose-50">삭제</button>
+                                  </div>
+                                </div>
+                              ))
+                            ) : null}
+                          </div>
+                        </fieldset>
+
+                        <div className="mt-3 flex justify-end">
+                          <button type="button" onClick={handleSaveSecurity} className="inline-flex h-9 items-center justify-center rounded-none border border-slate-300 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg- slate-50">
+                            저장
+                          </button>
+                        </div>
+                      </>
+                    ) : null}
                   </div>
 
                   <aside className="self-start border border-slate-200 bg-white p-3 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.45)] xl:sticky xl:top-[72px]">
@@ -1620,6 +1937,16 @@ export default function ConsolePage() {
                       <p>
                         <span className="font-semibold text-slate-800">스토리지</span>: {generatedRequest.storageType} {generatedRequest.storageSize}GB
                       </p>
+                      {isViewOnly ? (
+                        <>
+                          <p>
+                            <span className="font-semibold text-slate-800">Public IP</span>: {operateInstance?.publicIp ?? "-"}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-slate-800">Private IP</span>: {operateInstance?.privateIp ?? "-"}
+                          </p>
+                        </>
+                      ) : null}
                       <p>
                         <span className="font-semibold text-slate-800">VPC</span>: {selectedVpc?.vpcName ?? "-"}
                       </p>
@@ -1633,16 +1960,18 @@ export default function ConsolePage() {
                       >
                         목록으로
                       </button>
-                      <button
-                        type="submit"
-                        form="instance-create-form"
-                        disabled={createRequesting}
-                        className="inline-flex h-9 items-center justify-center rounded-none border border-[#123b84] bg-[#123b84] px-3 text-[12px] font-semibold text-white shadow-[0_10px_18px_-14px_rgba(18,59,132,0.9)] transition hover:border-[#0f3170] hover:bg-[#0f3170]"
-                      >
-                        {createRequesting ? "생성 요청 중..." : "인스턴스 생성 요청"}
-                      </button>
+                      {isViewOnly ? null : (
+                        <button
+                          type="submit"
+                          form="instance-create-form"
+                          disabled={createRequesting}
+                          className="inline-flex h-9 items-center justify-center rounded-none border border-[#123b84] bg-[#123b84] px-3 text-[12px] font-semibold text-white shadow-[0_10px_18px_-14px_rgba(18,59,132,0.9)] transition hover:border-[#0f3170] hover:bg-[#0f3170]"
+                        >
+                          {createRequesting ? "생성 요청 중..." : "인스턴스 생성 요청"}
+                        </button>
+                      )}
                     </div>
-                    {createRequestError ? (
+                    {isViewOnly ? null : createRequestError ? (
                       <p className="mt-2 text-[11px] text-rose-600">{createRequestError}</p>
                     ) : null}
                   </aside>

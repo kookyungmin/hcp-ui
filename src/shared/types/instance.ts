@@ -64,3 +64,18 @@ export type InstanceListItem = {
   publicIp: string | null;
   privateIp: string | null;
 };
+
+export type InstanceInfo = {
+  instanceId: string;
+  ownerId: string;
+  name: string;
+  tags: string[];
+  imageCode: string;
+  specCode: string;
+  vpcCode: string;
+  storageType: "HDD" | "SSD";
+  storageSize: number;
+  status: InstanceStatus | string;
+  publicIp: string | null;
+  privateIp: string | null;
+};

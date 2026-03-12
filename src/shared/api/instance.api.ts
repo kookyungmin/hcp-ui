@@ -1,6 +1,6 @@
 import { apiClient } from "@/shared/api/client";
 import type { ApiEnvelope, PageBody } from "@/shared/types/api";
-import type { GenerateInstanceRequest, InstanceListItem, InstanceMeta } from "@/shared/types/instance";
+import type { GenerateInstanceRequest, InstanceInfo, InstanceListItem, InstanceMeta } from "@/shared/types/instance";
 
 export async function getInstanceMetaAllApi() {
   const response = await apiClient.get<ApiEnvelope<InstanceMeta>>("/computes/v1/instance/meta/all");
@@ -68,5 +68,10 @@ export async function terminateInstanceApi(instanceId: string, idempotencyKey: s
     { instanceId },
     { headers: { "X-Idempotency-Key": idempotencyKey } }
   );
+  return response.data.body;
+}
+
+export async function getInstanceInfoApi(instanceId: string) {
+  const response = await apiClient.get<ApiEnvelope<InstanceInfo>>(`/computes/v1/instance/info/${encodeURIComponent(instanceId)}`);
   return response.data.body;
 }
