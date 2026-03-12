@@ -75,3 +75,26 @@ export async function getInstanceInfoApi(instanceId: string) {
   const response = await apiClient.get<ApiEnvelope<InstanceInfo>>(`/computes/v1/instance/info/${encodeURIComponent(instanceId)}`);
   return response.data.body;
 }
+
+export async function updateInstanceTagsApi(instanceId: string, tags: string) {
+  const response = await apiClient.patch<ApiEnvelope<unknown>>(
+    "/computes/v1/instance/tag",
+    { instanceId, tags }
+  );
+  return response.data.body;
+}
+
+export async function updateInstanceSpecApi(
+  instanceId: string,
+  specCode: string,
+  storageType: "HDD" | "SSD",
+  storageSize: number,
+  idempotencyKey: string
+) {
+  const response = await apiClient.patch<ApiEnvelope<unknown>>(
+    "/computes/v1/instance/spec",
+    { instanceId, specCode, storageType, storageSize },
+    { headers: { "X-Idempotency-Key": idempotencyKey } }
+  );
+  return response.data.body;
+}

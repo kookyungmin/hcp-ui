@@ -13,7 +13,7 @@ import { useAuthStore } from "@/shared/stores/auth.store";
 import { hasServicePermission } from "@/shared/lib/permission";
 import { getAccessToken, setAccessToken } from "@/shared/lib/access-token";
 import { refreshTokenApi } from "@/shared/api/auth.api";
-import { getInstanceListApi, getInstanceMetaAllApi, provisionInstanceApi, restartInstanceApi, stopInstanceApi, terminateInstanceApi, getInstanceInfoApi } from "@/shared/api/instance.api";
+import { getInstanceListApi, getInstanceMetaAllApi, provisionInstanceApi, restartInstanceApi, stopInstanceApi, terminateInstanceApi, getInstanceInfoApi, updateInstanceTagsApi, updateInstanceSpecApi } from "@/shared/api/instance.api";
 import { useToastStore } from "@/shared/stores/toast.store";
 import type { InstanceInfo } from "@/shared/types/instance";
 import type { GenerateInstanceRequest, InstanceMeta, InstanceStatus } from "@/shared/types/instance";
@@ -127,6 +127,7 @@ export default function ConsolePage() {
   const [selectedVpcCode, setSelectedVpcCode] = useState("");
   const [storageType, setStorageType] = useState<"HDD" | "SSD">("HDD");
   const [storageSize, setStorageSize] = useState(50);
+  const [storageSizeInput, setStorageSizeInput] = useState<string>("50");
   const [createFormErrors, setCreateFormErrors] = useState<{ instanceName?: string; storageSize?: string }>({});
   const [createRequesting, setCreateRequesting] = useState(false);
   const [createRequestError, setCreateRequestError] = useState<string | null>(null);
@@ -143,6 +144,7 @@ export default function ConsolePage() {
   const [stopKeys, setStopKeys] = useState<Record<string, string>>({});
   const [restartKeys, setRestartKeys] = useState<Record<string, string>>({});
   const [terminateKeys, setTerminateKeys] = useState<Record<string, string>>({});
+  const [specUpdateKeys, setSpecUpdateKeys] = useState<Record<string, string>>({});
   const firstReadableTarget = useMemo(() => {
     for (const category of SERVICE_CATEGORIES) {
       for (const service of category.services) {
@@ -723,6 +725,7 @@ export default function ConsolePage() {
     setSelectedVpcCode(operateInstance.vpcCode || "");
     if (typeof operateInstance.storageSize === "number") {
       setStorageSize(operateInstance.storageSize);
+      setStorageSizeInput(String(operateInstance.storageSize));
     }
     if (operateInstance.storageType === "HDD" || operateInstance.storageType === "SSD") {
       setStorageType(operateInstance.storageType);
@@ -735,14 +738,31 @@ export default function ConsolePage() {
 
   const handleSaveBasic = async () => {
     if (!activeRowId) return;
-    // TODO: Connect basic update API (tags) when available
-    showToast("success", "기본 설정 저장 API 연결 필요 (태그)");
+    try {
+      await updateInstanceTagsApi(activeRowId, tags.join(","));
+      const info = await getInstanceInfoApi(activeRowId);
+      setOperateInstance(info);
+      showToast("success", "저장되었습니다.");
+      setReloadKey((k) => k + 1);
+    } catch {
+      // error toast handled by interceptor
+    }
   };
 
   const handleSaveSpecStorage = async () => {
     if (!activeRowId) return;
-    // TODO: Connect spec/storage update API when available
-    showToast("success", "사양/스토리지 저장 API 연결 필요");
+    try {
+      const id = activeRowId;
+      const key = specUpdateKeys[id] ?? createIdempotencyKey();
+      if (!specUpdateKeys[id]) setSpecUpdateKeys((prev) => ({ ...prev, [id]: key }));
+      await updateInstanceSpecApi(id, selectedSpecCode, storageType, storageSize, key);
+      const info = await getInstanceInfoApi(id);
+      setOperateInstance(info);
+      setReloadKey((k) => k + 1);
+      showToast("success", "저장되었습니다.");
+    } catch {
+      // error toast handled globally
+    }
   };
 
   const handleSaveSsh = async () => {
@@ -803,6 +823,9 @@ export default function ConsolePage() {
       params.set("mode", "create");
     } else {
       params.delete("mode");
+    }
+    if (mode === "list") {
+      setReloadKey((k) => k + 1);
     }
     router.push(`/console?${params.toString()}`);
   };
@@ -1696,15 +1719,30 @@ export default function ConsolePage() {
                               <label className="space-y-1.5">
                                 <span className="text-[12px] font-semibold text-slate-700">스토리지 용량 (GB)</span>
                                 <input
-                                  value={storageSize}
+                                  value={storageSizeInput}
                                   disabled={!canEditStorageSize}
-                                  type="number"
-                                  min={0}
-                                  step={1}
+                                  type="text"
+                                  inputMode="numeric"
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    if (/^\d*$/.test(v)) {
+                                      setStorageSizeInput(v);
+                                      if (v !== "") {
+                                        const n = Number(v);
+                                        if (Number.isFinite(n)) setStorageSize(Math.max(0, Math.trunc(n)));
+                                      }
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    const n = Number(storageSizeInput);
+                                    const normalized = Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : Math.max(0, Math.trunc(storageSize));
+                                    setStorageSize(normalized);
+                                    setStorageSizeInput(String(normalized));
+                                  }}
                                   className={`h-10 w-full rounded-none border px-3 text-[12px] text-slate-700 ${
                                     !canEditStorageSize
                                       ? "cursor-not-allowed border-slate-300 bg-slate-50"
-                                      : "border-slate-300 bg-white focus:border-[#18499f] focus:outline-none focus:ring-2 focus:ring-[#18499f]/15"
+                                      : "border-slate-300 bg-white"
                                   }`}
                                 />
                               </label>
@@ -1869,7 +1907,7 @@ export default function ConsolePage() {
                               inboundRules.map((rule, idx) => (
                                 <div key={`inbound-${idx}`} className="grid grid-cols-[60px_100px_1fr_1fr_70px] items-center gap-2">
                                   <span className="inline-flex h-8 items-center justify-center border border-slate-300 bg-slate-50 text-[10px] font-semibold text-slate-700">TCP</span>
-                                  <input value={rule.port} onChange={(e) => updateInboundRule(idx, { port: e.target.value })} placeholder="포트" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
+                                  <input value={rule.port} onChange={(e) => updateInboundRule(idx, { port: e.target.value })} placeholder="포트" className="h-8 w-[100px] rounded-none border border-slate-300 bg-white px-2" />
                                   <input value={rule.cidr} onChange={(e) => updateInboundRule(idx, { cidr: e.target.value })} placeholder="IP/CIDR (예: 0.0.0.0/0)" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
                                   <input value={rule.name} onChange={(e) => updateInboundRule(idx, { name: e.target.value })} placeholder="규칙 이름" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
                                   <div className="flex justify-end">
@@ -1898,7 +1936,7 @@ export default function ConsolePage() {
                               outboundRules.map((rule, idx) => (
                                 <div key={`outbound-${idx}`} className="grid grid-cols-[60px_100px_1fr_1fr_70px] items-center gap-2">
                                   <span className="inline-flex h-8 items-center justify-center border border-slate-300 bg-slate-50 text-[10px] font-semibold text-slate-700">TCP</span>
-                                  <input value={rule.port} onChange={(e) => updateOutboundRule(idx, { port: e.target.value })} placeholder="포트" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
+                                  <input value={rule.port} onChange={(e) => updateOutboundRule(idx, { port: e.target.value })} placeholder="포트" className="h-8 w-[100px] rounded-none border border-slate-300 bg-white px-2" />
                                   <input value={rule.cidr} onChange={(e) => updateOutboundRule(idx, { cidr: e.target.value })} placeholder="IP/CIDR (예: 0.0.0.0/0)" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
                                   <input value={rule.name} onChange={(e) => updateOutboundRule(idx, { name: e.target.value })} placeholder="규칙 이름" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
                                   <div className="flex justify-end">
