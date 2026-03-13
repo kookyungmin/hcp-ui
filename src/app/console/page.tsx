@@ -13,7 +13,7 @@ import { useAuthStore } from "@/shared/stores/auth.store";
 import { hasServicePermission } from "@/shared/lib/permission";
 import { getAccessToken, setAccessToken } from "@/shared/lib/access-token";
 import { refreshTokenApi } from "@/shared/api/auth.api";
-import { getInstanceListApi, getInstanceMetaAllApi, provisionInstanceApi, restartInstanceApi, stopInstanceApi, terminateInstanceApi, getInstanceInfoApi, updateInstanceTagsApi, updateInstanceSpecApi } from "@/shared/api/instance.api";
+import { getInstanceListApi, getInstanceMetaAllApi, provisionInstanceApi, restartInstanceApi, stopInstanceApi, terminateInstanceApi, getInstanceInfoApi, updateInstanceTagsApi, updateInstanceSpecApi, getInstanceSshKeyApi, upsertInstanceSshKeyApi } from "@/shared/api/instance.api";
 import { useToastStore } from "@/shared/stores/toast.store";
 import type { InstanceInfo } from "@/shared/types/instance";
 import type { GenerateInstanceRequest, InstanceMeta, InstanceStatus } from "@/shared/types/instance";
@@ -689,6 +689,12 @@ export default function ConsolePage() {
   const [operateError, setOperateError] = useState<string | null>(null);
   const showToast = useToastStore((s) => s.showToast);
   const [operateTab, setOperateTab] = useState<"info" | "ssh" | "security">("info");
+  const [sshKeyName, setSshKeyName] = useState("");
+  const [sshKeyValue, setSshKeyValue] = useState("");
+  const [sshKeyLoading, setSshKeyLoading] = useState(false);
+  const [sshKeyError, setSshKeyError] = useState<string | null>(null);
+  const [sshKeyIdemKeys, setSshKeyIdemKeys] = useState<Record<string, string>>({});
+  const [sshLoadedFor, setSshLoadedFor] = useState<string | null>(null);
   type SecurityRule = { protocol: "TCP"; port: string; cidr: string; name: string };
   const [inboundRules, setInboundRules] = useState<SecurityRule[]>([]);
   const [outboundRules, setOutboundRules] = useState<SecurityRule[]>([]);
@@ -767,9 +773,52 @@ export default function ConsolePage() {
 
   const handleSaveSsh = async () => {
     if (!activeRowId) return;
-    // TODO: Connect SSH public key register API
-    showToast("success", "SSH Public Key 저장 API 연결 필요");
+    try {
+      const id = activeRowId;
+      const key = sshKeyIdemKeys[id] ?? createIdempotencyKey();
+      if (!sshKeyIdemKeys[id]) setSshKeyIdemKeys((prev) => ({ ...prev, [id]: key }));
+      await upsertInstanceSshKeyApi(id, sshKeyName.trim(), sshKeyValue.trim(), key);
+      showToast("success", "저장되었습니다.");
+    } catch {
+      // error toast handled globally (POST). GET is toast-silent.
+    }
   };
+
+  // Load SSH key when switching to SSH tab
+  useEffect(() => {
+    if (!isOperateMode || operateTab !== "ssh" || !activeRowId) return;
+    if (sshLoadedFor === activeRowId) return;
+    let mounted = true;
+    (async () => {
+      try {
+        setSshKeyLoading(true);
+        setSshKeyError(null);
+        const data = await getInstanceSshKeyApi(activeRowId);
+        if (!mounted) return;
+        setSshKeyName(data.keyName || "");
+        setSshKeyValue(data.sshKey || "");
+        setSshLoadedFor(activeRowId);
+      } catch (e: any) {
+        if (!mounted) return;
+        const status = e?.response?.status;
+        if (status === 404) {
+          // No key registered — keep inputs empty without error toast
+          setSshKeyName("");
+          setSshKeyValue("");
+          setSshKeyError(null);
+          setSshLoadedFor(activeRowId);
+        } else {
+          // Other errors are already toast-silent for this path
+          setSshKeyError(null);
+        }
+      } finally {
+        if (mounted) setSshKeyLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [isOperateMode, operateTab, activeRowId, sshLoadedFor]);
 
   const handleSaveSecurity = async () => {
     if (!activeRowId) return;
@@ -1867,13 +1916,29 @@ export default function ConsolePage() {
                       <fieldset className="border border-slate-400 bg-white px-3 pb-3 pt-1 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.5)]">
                         <legend className="px-1 text-[12px] font-semibold tracking-[0.02em] text-black">SSH Public Key</legend>
                         <div className="space-y-3 pt-1">
+                          {sshKeyLoading ? (
+                            <div className="rounded-none border border-dashed border-slate-300 p-2 text-[12px] text-slate-600">키 정보를 불러오는 중입니다...</div>
+                          ) : sshKeyError ? (
+                            <></>
+                          ) : null}
+
                           <label className="space-y-1.5">
                             <span className="text-[12px] font-semibold text-slate-700">키 이름</span>
-                            <input className="h-10 w-full rounded-none border border-slate-300 bg-white px-3 text-[12px] text-slate-700" placeholder="예: my-key" />
+                            <input
+                              value={sshKeyName}
+                              onChange={(e) => setSshKeyName(e.target.value)}
+                              className="h-10 w-full rounded-none border border-slate-300 bg-white px-3 text-[12px] text-slate-700"
+                              placeholder="예: my-key"
+                            />
                           </label>
                           <label className="space-y-1.5">
                             <span className="text-[12px] font-semibold text-slate-700">Public Key</span>
-                            <textarea className="min-h-[120px] w-full rounded-none border border-slate-300 bg-white p-3 text-[12px] text-slate-700" placeholder="ssh-ed25519 AAAAC3... user@host" />
+                            <textarea
+                              value={sshKeyValue}
+                              onChange={(e) => setSshKeyValue(e.target.value)}
+                              className="min-h-[120px] w-full rounded-none border border-slate-300 bg-white p-3 text-[12px] text-slate-700"
+                              placeholder="ssh-ed25519 AAAAC3... user@host"
+                            />
                           </label>
                           <div className="flex justify-end">
                             <button

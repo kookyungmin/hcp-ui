@@ -98,3 +98,24 @@ export async function updateInstanceSpecApi(
   );
   return response.data.body;
 }
+
+export async function getInstanceSshKeyApi(instanceId: string) {
+  const response = await apiClient.get<ApiEnvelope<{ instanceId: string; keyName: string; sshKey: string }>>(
+    `/computes/v1/instance/ssh-key/${encodeURIComponent(instanceId)}`
+  );
+  return response.data.body;
+}
+
+export async function upsertInstanceSshKeyApi(
+  instanceId: string,
+  keyName: string,
+  sshKey: string,
+  idempotencyKey: string
+) {
+  const response = await apiClient.post<ApiEnvelope<unknown>>(
+    "/computes/v1/instance/ssh-key",
+    { instanceId, keyName, sshKey },
+    { headers: { "X-Idempotency-Key": idempotencyKey } }
+  );
+  return response.data.body;
+}
