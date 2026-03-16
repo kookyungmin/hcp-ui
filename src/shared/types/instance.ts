@@ -63,6 +63,7 @@ export type InstanceListItem = {
   status: InstanceStatus;
   publicIp: string | null;
   privateIp: string | null;
+  message?: string;
 };
 
 export type InstanceInfo = {

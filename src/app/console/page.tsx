@@ -13,7 +13,7 @@ import { useAuthStore } from "@/shared/stores/auth.store";
 import { hasServicePermission } from "@/shared/lib/permission";
 import { getAccessToken, setAccessToken } from "@/shared/lib/access-token";
 import { refreshTokenApi } from "@/shared/api/auth.api";
-import { getInstanceListApi, getInstanceMetaAllApi, provisionInstanceApi, restartInstanceApi, stopInstanceApi, terminateInstanceApi, getInstanceInfoApi, updateInstanceTagsApi, updateInstanceSpecApi, getInstanceSshKeyApi, upsertInstanceSshKeyApi } from "@/shared/api/instance.api";
+import { getInstanceListApi, getInstanceMetaAllApi, provisionInstanceApi, restartInstanceApi, stopInstanceApi, terminateInstanceApi, getInstanceInfoApi, updateInstanceTagsApi, updateInstanceSpecApi, getInstanceSshKeyApi, upsertInstanceSshKeyApi, upsertInstanceNetworkPolicyApi, getInstanceNetworkPolicyApi } from "@/shared/api/instance.api";
 import { useToastStore } from "@/shared/stores/toast.store";
 import type { InstanceInfo } from "@/shared/types/instance";
 import type { GenerateInstanceRequest, InstanceMeta, InstanceStatus } from "@/shared/types/instance";
@@ -79,6 +79,7 @@ type ServerInstance = {
   publicIp: string;
   privateIp: string;
   vpcName: string;
+  message?: string;
 };
 
 // NOTE: Replaced by live API fetching; keeping structure reference only.
@@ -359,7 +360,8 @@ export default function ConsolePage() {
           storageSizeGb: item.storageSize,
           publicIp: item.publicIp ?? "-",
           privateIp: item.privateIp ?? "-",
-          vpcName: item.vpcName
+          vpcName: item.vpcName,
+          message: item.message ?? ""
         }));
 
         setInstances(mapped);
@@ -695,6 +697,8 @@ export default function ConsolePage() {
   const [sshKeyError, setSshKeyError] = useState<string | null>(null);
   const [sshKeyIdemKeys, setSshKeyIdemKeys] = useState<Record<string, string>>({});
   const [sshLoadedFor, setSshLoadedFor] = useState<string | null>(null);
+  const [netPolicyIdemKeys, setNetPolicyIdemKeys] = useState<Record<string, string>>({});
+  const [netLoadedFor, setNetLoadedFor] = useState<string | null>(null);
   type SecurityRule = { protocol: "TCP"; port: string; cidr: string; name: string };
   const [inboundRules, setInboundRules] = useState<SecurityRule[]>([]);
   const [outboundRules, setOutboundRules] = useState<SecurityRule[]>([]);
@@ -822,9 +826,58 @@ export default function ConsolePage() {
 
   const handleSaveSecurity = async () => {
     if (!activeRowId) return;
-    // TODO: Connect security policy update API
-    showToast("success", "보안 그룹 저장 API 연결 필요");
+    try {
+      const id = activeRowId;
+      const ingressPolicies = inboundRules
+        .map((r) => ({ policyName: r.name?.trim() || "", port: r.port?.trim() || "", ipCidr: r.cidr?.trim() || "" }))
+        .filter((r) => r.port !== "" && r.ipCidr !== "");
+      const egressPolicies = outboundRules
+        .map((r) => ({ policyName: r.name?.trim() || "", port: r.port?.trim() || "", ipCidr: r.cidr?.trim() || "" }))
+        .filter((r) => r.port !== "" && r.ipCidr !== "");
+
+      const key = netPolicyIdemKeys[id] ?? createIdempotencyKey();
+      if (!netPolicyIdemKeys[id]) setNetPolicyIdemKeys((prev) => ({ ...prev, [id]: key }));
+
+      await upsertInstanceNetworkPolicyApi(id, ingressPolicies, egressPolicies, key);
+      // reload policies from server
+      try {
+        const data = await getInstanceNetworkPolicyApi(id);
+        setInboundRules((data.ingressPolicies || []).map((p) => ({ protocol: "TCP", port: p.port || "", cidr: p.ipCidr || "", name: p.policyName || "" })));
+        setOutboundRules((data.egressPolicies || []).map((p) => ({ protocol: "TCP", port: p.port || "", cidr: p.ipCidr || "", name: p.policyName || "" })));
+        setNetLoadedFor(id);
+      } catch {}
+      showToast("success", "저장되었습니다.");
+    } catch {
+      // error toast handled globally
+    }
   };
+
+  // Load network policies when switching to security tab
+  useEffect(() => {
+    if (!isOperateMode || operateTab !== "security" || !activeRowId) return;
+    if (netLoadedFor === activeRowId) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const data = await getInstanceNetworkPolicyApi(activeRowId);
+        if (!mounted) return;
+        setInboundRules((data.ingressPolicies || []).map((p) => ({ protocol: "TCP", port: p.port || "", cidr: p.ipCidr || "", name: p.policyName || "" })));
+        setOutboundRules((data.egressPolicies || []).map((p) => ({ protocol: "TCP", port: p.port || "", cidr: p.ipCidr || "", name: p.policyName || "" })));
+        setNetLoadedFor(activeRowId);
+      } catch (e: any) {
+        const status = e?.response?.status;
+        if (status === 404) {
+          if (!mounted) return;
+          setInboundRules([]);
+          setOutboundRules([]);
+          setNetLoadedFor(activeRowId);
+        }
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [isOperateMode, operateTab, activeRowId, netLoadedFor]);
 
   const addInboundRule = () => setInboundRules((prev) => [...prev, { protocol: "TCP", port: "", cidr: "", name: "" }]);
   const addOutboundRule = () => setOutboundRules((prev) => [...prev, { protocol: "TCP", port: "", cidr: "", name: "" }]);
@@ -834,6 +887,21 @@ export default function ConsolePage() {
     setInboundRules((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   const updateOutboundRule = (idx: number, patch: Partial<SecurityRule>) =>
     setOutboundRules((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  const isValidPortInput = (v: string) => {
+    const s = v.trim();
+    if (s === "") return true; // allow typing
+    if (/^\d+$/.test(s)) {
+      const n = Number(s);
+      return n >= 1 && n <= 65535;
+    }
+    if (/^\d+-\d+$/.test(s)) {
+      const [a, b] = s.split("-").map((x) => Number(x));
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+      if (a < 1 || a > 65535 || b < 1 || b > 65535) return false;
+      return a <= b;
+    }
+    return false;
+  };
 
   useEffect(() => {
     if (!isCreateMode && !isOperateMode) {
@@ -1331,13 +1399,13 @@ export default function ConsolePage() {
                   <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">태그</th>
                   <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">OS 명</th>
                   <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">OS 버전</th>
-                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[10px] font-semibold tracking-[0.08em]">CPU Cores</th>
-                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[10px] font-semibold tracking-[0.08em]">Memory Size </th>
-                  <th className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[10px] font-semibold tracking-[0.08em]">Storage Size (GB)</th>
+                  <th className="w-[70px] min-w-[70px] border-b border-r border-slate-100 px-2 py-2.5 text-right text-[10px] font-semibold tracking-[0.08em]">CPU</th>
+                  <th className="w-[86px] min-w-[86px] border-b border-r border-slate-100 px-2 py-2.5 text-right text-[10px] font-semibold tracking-[0.08em]">Memory</th>
+                  <th className="w-[86px] min-w-[86px] border-b border-r border-slate-100 px-2 py-2.5 text-right text-[10px] font-semibold tracking-[0.08em]">Storage</th>
                   <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">Public IP</th>
                   <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">Private IP</th>
                   <th className="border-b border-r border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">VPC 명</th>
-                  <th className="border-b border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">인스턴스 ID</th>
+                  <th className="w-[140px] min-w-[140px] border-b border-slate-100 px-2 py-2.5 text-left text-[10px] font-semibold tracking-[0.08em]">인스턴스 ID</th>
                 </tr>
               </thead>
               <tbody>
@@ -1395,13 +1463,13 @@ export default function ConsolePage() {
                     </td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.osName}</td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.osVersion}</td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[12px] text-slate-700">{instance.cpuCores}</td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[12px] text-slate-700">{instance.memorySize}</td>
-                    <td className="border-b border-r border-slate-100 px-3 py-2.5 text-right text-[12px] text-slate-700">{instance.storageSizeGb}</td>
+                    <td className="w-[70px] min-w-[70px] border-b border-r border-slate-100 px-2 py-2.5 text-right text-[12px] text-slate-700">{instance.cpuCores}</td>
+                    <td className="w-[86px] min-w-[86px] border-b border-r border-slate-100 px-2 py-2.5 text-right text-[12px] text-slate-700">{instance.memorySize}</td>
+                    <td className="w-[86px] min-w-[86px] border-b border-r border-slate-100 px-2 py-2.5 text-right text-[12px] text-slate-700">{instance.storageSizeGb}</td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.publicIp}</td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.privateIp}</td>
                     <td className="border-b border-r border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.vpcName}</td>
-                    <td className="border-b border-slate-100 px-3 py-2.5 text-[12px] text-slate-700">{instance.instanceId}</td>
+                    <td className="w-[140px] min-w-[140px] border-b border-slate-100 px-2 py-2.5 text-[12px] text-slate-700 truncate">{instance.instanceId}</td>
                   </tr>
                 ))) : (
                   <tr>
@@ -1972,7 +2040,15 @@ export default function ConsolePage() {
                               inboundRules.map((rule, idx) => (
                                 <div key={`inbound-${idx}`} className="grid grid-cols-[60px_100px_1fr_1fr_70px] items-center gap-2">
                                   <span className="inline-flex h-8 items-center justify-center border border-slate-300 bg-slate-50 text-[10px] font-semibold text-slate-700">TCP</span>
-                                  <input value={rule.port} onChange={(e) => updateInboundRule(idx, { port: e.target.value })} placeholder="포트" className="h-8 w-[100px] rounded-none border border-slate-300 bg-white px-2" />
+                                  <input
+                                    value={rule.port}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      if (isValidPortInput(v)) updateInboundRule(idx, { port: v });
+                                    }}
+                                    placeholder="포트 (예: 80 또는 80-100)"
+                                    className="h-8 w-[100px] rounded-none border border-slate-300 bg-white px-2"
+                                  />
                                   <input value={rule.cidr} onChange={(e) => updateInboundRule(idx, { cidr: e.target.value })} placeholder="IP/CIDR (예: 0.0.0.0/0)" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
                                   <input value={rule.name} onChange={(e) => updateInboundRule(idx, { name: e.target.value })} placeholder="규칙 이름" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
                                   <div className="flex justify-end">
@@ -2001,7 +2077,15 @@ export default function ConsolePage() {
                               outboundRules.map((rule, idx) => (
                                 <div key={`outbound-${idx}`} className="grid grid-cols-[60px_100px_1fr_1fr_70px] items-center gap-2">
                                   <span className="inline-flex h-8 items-center justify-center border border-slate-300 bg-slate-50 text-[10px] font-semibold text-slate-700">TCP</span>
-                                  <input value={rule.port} onChange={(e) => updateOutboundRule(idx, { port: e.target.value })} placeholder="포트" className="h-8 w-[100px] rounded-none border border-slate-300 bg-white px-2" />
+                                  <input
+                                    value={rule.port}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      if (isValidPortInput(v)) updateOutboundRule(idx, { port: v });
+                                    }}
+                                    placeholder="포트 (예: 80 또는 80-100)"
+                                    className="h-8 w-[100px] rounded-none border border-slate-300 bg-white px-2"
+                                  />
                                   <input value={rule.cidr} onChange={(e) => updateOutboundRule(idx, { cidr: e.target.value })} placeholder="IP/CIDR (예: 0.0.0.0/0)" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
                                   <input value={rule.name} onChange={(e) => updateOutboundRule(idx, { name: e.target.value })} placeholder="규칙 이름" className="h-8 rounded-none border border-slate-300 bg-white px-2" />
                                   <div className="flex justify-end">

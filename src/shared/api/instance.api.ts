@@ -119,3 +119,28 @@ export async function upsertInstanceSshKeyApi(
   );
   return response.data.body;
 }
+
+export async function upsertInstanceNetworkPolicyApi(
+  instanceId: string,
+  ingressPolicies: Array<{ policyName: string; port: string; ipCidr: string }>,
+  egressPolicies: Array<{ policyName: string; port: string; ipCidr: string }>,
+  idempotencyKey: string
+) {
+  const response = await apiClient.post<ApiEnvelope<unknown>>(
+    "/computes/v1/instance/network-policy",
+    { instanceId, ingressPolicies, egressPolicies },
+    { headers: { "X-Idempotency-Key": idempotencyKey } }
+  );
+  return response.data.body;
+}
+
+export async function getInstanceNetworkPolicyApi(instanceId: string) {
+  const response = await apiClient.get<
+    ApiEnvelope<{
+      instanceId: string;
+      ingressPolicies: Array<{ policyName: string; port: string; ipCidr: string }>;
+      egressPolicies: Array<{ policyName: string; port: string; ipCidr: string }>;
+    }>
+  >(`/computes/v1/instance/network-policy/${encodeURIComponent(instanceId)}`);
+  return response.data.body;
+}
