@@ -52,7 +52,7 @@ src
 
 ![img.png](image/img1.png)
 
-![img_1.png](image/img1_1.png)
+![img.png](image/img3_1.png)
 
 ![img_2.png](image/img1_2.png)
 
@@ -66,7 +66,7 @@ src
 
 * SSH public key 등록
 
-![img_1.png](image/img2_1.png)
+![img_1.png](image/img_3_2.png)
 
 * 보안 그룹 (인 바운드 / 아웃바운드 방화벽 정책 관리)
 
