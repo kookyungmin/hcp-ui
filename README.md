@@ -62,7 +62,7 @@ src
 
 * 인스턴스 정보 수정 (태그 수정 / Scale up & down)
 
-![img.png](image/img2.png)
+![img.png](image/img3_3.png)
 
 * SSH public key 등록
 
@@ -70,4 +70,4 @@ src
 
 * 보안 그룹 (인 바운드 / 아웃바운드 방화벽 정책 관리)
 
-![img_2.png](image/img2_2.png)
+![img_1.png](image/img_3_4.png)
