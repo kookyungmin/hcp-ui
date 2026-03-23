@@ -1,0 +1,8 @@
+.git
+.idea
+**/node_modules
+**/.next
+**/dist
+**/build
+*.log
+README.md

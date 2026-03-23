@@ -35,6 +35,14 @@ src
 └─ widgets        # 복합 UI 블록
 ```
 
+### Build
+
+```
+docker build --no-cache --progress=plain \
+  -t hcp-ui:v1.0.0 \
+  -f Dockerfile .
+```
+
 ### UI
 
 * 랜딩 페이지

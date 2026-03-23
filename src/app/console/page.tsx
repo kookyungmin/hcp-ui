@@ -1,11 +1,10 @@
 "use client";
 
+import { isAxiosError } from "axios";
 import Image from "next/image";
 import "xterm/css/xterm.css";
-import { Terminal } from "xterm";
-import { FitAddon } from "@xterm/addon-fit";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BrandLogo } from "@/shared/ui/brand-logo";
 import { SERVICE_CATEGORIES } from "@/shared/constants/service-catalog";
@@ -17,6 +16,8 @@ import { getInstanceListApi, getInstanceMetaAllApi, provisionInstanceApi, restar
 import { useToastStore } from "@/shared/stores/toast.store";
 import type { InstanceInfo } from "@/shared/types/instance";
 import type { GenerateInstanceRequest, InstanceMeta, InstanceStatus } from "@/shared/types/instance";
+import type { Terminal as XTermTerminal } from "xterm";
+import type { FitAddon as XTermFitAddon } from "@xterm/addon-fit";
 
 function CategoryIcon({ id }: { id: string }) {
   switch (id) {
@@ -92,7 +93,14 @@ const createIdempotencyKey = () => {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
-export default function ConsolePage() {
+type OperateTab = "info" | "ssh" | "security";
+const OPERATE_TABS: ReadonlyArray<{ key: OperateTab; label: string }> = [
+  { key: "info", label: "인스턴스 정보" },
+  { key: "ssh", label: "SSH Public Key" },
+  { key: "security", label: "보안 그룹" }
+];
+
+function ConsolePageContent() {
   const SIDEBAR_COLLAPSE_BREAKPOINT = 1500;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -205,10 +213,10 @@ export default function ConsolePage() {
   const [wsReady, setWsReady] = useState(false);
   const [wsError, setWsError] = useState<string | null>(null);
   const [wsClosed, setWsClosed] = useState(false);
-  const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
+  const [, setConsoleLogs] = useState<string[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
-  const termRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
+  const termRef = useRef<XTermTerminal | null>(null);
+  const fitAddonRef = useRef<XTermFitAddon | null>(null);
   const termContainerRef = useRef<HTMLDivElement | null>(null);
   const decoderRef = useRef<TextDecoder | null>(null);
   const resizeObsRef = useRef<ResizeObserver | null>(null);
@@ -407,6 +415,7 @@ export default function ConsolePage() {
     let resizeArmed = false;
     let resizeEnabled = false;
     let resizeTimeoutId: number | null = null;
+    let cancelled = false;
     const sendResize = (force = false) => {
       const ws = wsRef.current;
       const term = termRef.current;
@@ -417,45 +426,54 @@ export default function ConsolePage() {
         } catch {}
       }
     };
-    // Initialize xterm if needed
-    if (!termRef.current && termContainerRef.current) {
-      const term = new Terminal({ convertEol: true, scrollback: 2000, fontSize: 12, theme: { background: "#000000" } });
-      const fit = new FitAddon();
-      term.loadAddon(fit);
-      term.open(termContainerRef.current);
-      try { fit.fit(); } catch {}
-      term.onData((data) => {
-        resetInactivity();
-        const ws = wsRef.current;
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          try {
-            const enc = (window as any).TextEncoder ? new TextEncoder() : null;
-            if (enc) {
-              ws.send(enc.encode(data));
-            } else {
-              ws.send(data);
-            }
-          } catch {
-            try { ws.send(data); } catch {}
-          }
-        }
-      });
-      termRef.current = term;
-      fitAddonRef.current = fit;
-      // Observe container resize (sidebar toggle, split view, etc.)
-      if (!resizeObsRef.current) {
-        resizeObsRef.current = new ResizeObserver(() => {
-          try { fitAddonRef.current?.fit(); } catch {}
-          // Only send after READY
-          sendResize();
-        });
-      }
-      try { resizeObsRef.current.observe(termContainerRef.current); } catch {}
-    }
-    if (!decoderRef.current) {
-      decoderRef.current = new TextDecoder();
-    }
     const connect = async () => {
+      if (!termRef.current && termContainerRef.current) {
+        const [{ Terminal }, { FitAddon }] = await Promise.all([
+          import("xterm"),
+          import("@xterm/addon-fit")
+        ]);
+        if (cancelled || !termContainerRef.current) return;
+
+        const term = new Terminal({
+          convertEol: true,
+          scrollback: 2000,
+          fontSize: 12,
+          theme: { background: "#000000" }
+        });
+        const fit = new FitAddon();
+        term.loadAddon(fit);
+        term.open(termContainerRef.current);
+        try { fit.fit(); } catch {}
+        term.onData((data) => {
+          resetInactivity();
+          const ws = wsRef.current;
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            try {
+              const enc = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
+              if (enc) {
+                ws.send(enc.encode(data));
+              } else {
+                ws.send(data);
+              }
+            } catch {
+              try { ws.send(data); } catch {}
+            }
+          }
+        });
+        termRef.current = term;
+        fitAddonRef.current = fit;
+        if (!resizeObsRef.current) {
+          resizeObsRef.current = new ResizeObserver(() => {
+            try { fitAddonRef.current?.fit(); } catch {}
+            sendResize();
+          });
+        }
+        try { resizeObsRef.current.observe(termContainerRef.current); } catch {}
+      }
+      if (!decoderRef.current) {
+        decoderRef.current = new TextDecoder();
+      }
+
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
       const token = getAccessToken();
       const qp = new URLSearchParams({ instanceId: selectedInstance.instanceId });
@@ -591,7 +609,7 @@ export default function ConsolePage() {
           }
           if (ev.reason) setWsError(ev.reason);
         };
-      } catch (e) {
+      } catch {
         setWsError("웹소켓을 초기화할 수 없습니다.");
       }
     };
@@ -627,6 +645,7 @@ export default function ConsolePage() {
     window.addEventListener("resize", onResize);
 
     return () => {
+      cancelled = true;
       if (wsRef.current) {
         try { wsRef.current.close(); } catch {}
         wsRef.current = null;
@@ -645,7 +664,7 @@ export default function ConsolePage() {
         termRef.current = null;
       }
       if (fitAddonRef.current) {
-        try { (fitAddonRef.current as any).dispose?.(); } catch {}
+        try { fitAddonRef.current.dispose(); } catch {}
         fitAddonRef.current = null;
       }
       if (resizeObsRef.current && termContainerRef.current) {
@@ -687,10 +706,10 @@ export default function ConsolePage() {
 
   // Fetch selected instance info in operate mode
   const [operateInstance, setOperateInstance] = useState<InstanceInfo | null>(null);
-  const [operateLoading, setOperateLoading] = useState(false);
-  const [operateError, setOperateError] = useState<string | null>(null);
+  const [, setOperateLoading] = useState(false);
+  const [, setOperateError] = useState<string | null>(null);
   const showToast = useToastStore((s) => s.showToast);
-  const [operateTab, setOperateTab] = useState<"info" | "ssh" | "security">("info");
+  const [operateTab, setOperateTab] = useState<OperateTab>("info");
   const [sshKeyName, setSshKeyName] = useState("");
   const [sshKeyValue, setSshKeyValue] = useState("");
   const [sshKeyLoading, setSshKeyLoading] = useState(false);
@@ -802,9 +821,9 @@ export default function ConsolePage() {
         setSshKeyName(data.keyName || "");
         setSshKeyValue(data.sshKey || "");
         setSshLoadedFor(activeRowId);
-      } catch (e: any) {
+      } catch (error: unknown) {
         if (!mounted) return;
-        const status = e?.response?.status;
+        const status = isAxiosError(error) ? error.response?.status : undefined;
         if (status === 404) {
           // No key registered — keep inputs empty without error toast
           setSshKeyName("");
@@ -864,8 +883,8 @@ export default function ConsolePage() {
         setInboundRules((data.ingressPolicies || []).map((p) => ({ protocol: "TCP", port: p.port || "", cidr: p.ipCidr || "", name: p.policyName || "" })));
         setOutboundRules((data.egressPolicies || []).map((p) => ({ protocol: "TCP", port: p.port || "", cidr: p.ipCidr || "", name: p.policyName || "" })));
         setNetLoadedFor(activeRowId);
-      } catch (e: any) {
-        const status = e?.response?.status;
+      } catch (error: unknown) {
+        const status = isAxiosError(error) ? error.response?.status : undefined;
         if (status === 404) {
           if (!mounted) return;
           setInboundRules([]);
@@ -1633,17 +1652,13 @@ export default function ConsolePage() {
                     {isOperateMode ? (
                       <div className="mb-3">
                         <div className="flex items-end gap-1 border-b border-slate-200">
-                          {[
-                            { key: "info", label: "인스턴스 정보" },
-                          { key: "ssh", label: "SSH Public Key" },
-                          { key: "security", label: "보안 그룹" }
-                          ].map((tab) => {
-                            const active = operateTab === (tab.key as any);
+                          {OPERATE_TABS.map((tab) => {
+                            const active = operateTab === tab.key;
                             return (
                               <button
                                 key={tab.key}
                                 type="button"
-                                onClick={() => setOperateTab(tab.key as any)}
+                                onClick={() => setOperateTab(tab.key)}
                                 className={`inline-flex h-9 items-center justify-center rounded-t-md px-3 text-[12px] font-medium ${
                                   active
                                     ? "-mb-px border-x border-t border-slate-300 bg-white text-slate-900"
@@ -2174,5 +2189,13 @@ export default function ConsolePage() {
       </main>
 
     </div>
+  );
+}
+
+export default function ConsolePage() {
+  return (
+    <Suspense fallback={null}>
+      <ConsolePageContent />
+    </Suspense>
   );
 }

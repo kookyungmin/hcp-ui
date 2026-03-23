@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { HeroSection } from "@/features/landing/ui/hero-section";
 import { ServiceGrid } from "@/features/landing/ui/service-grid";
 import { Footer } from "@/widgets/footer";
@@ -9,7 +10,9 @@ export default function HomePage() {
       <TopNav />
       <main>
         <HeroSection />
-        <ServiceGrid />
+        <Suspense fallback={null}>
+          <ServiceGrid />
+        </Suspense>
       </main>
       <Footer />
     </>
